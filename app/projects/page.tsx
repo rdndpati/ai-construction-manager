@@ -1,50 +1,40 @@
-export default function ProjectsPage() {
-  const projects = [
-    {
-      name: "Hillsboro Solar",
-      status: "Construction",
-      rfis: 18,
-      drawings: 1248,
-    },
-    {
-      name: "Texas Solar Farm",
-      status: "Engineering",
-      rfis: 9,
-      drawings: 856,
-    },
-    {
-      name: "Memphis Substation",
-      status: "Design",
-      rfis: 4,
-      drawings: 310,
-    },
-  ];
+import Link from "next/link";
+import NewProjectDialog from "@/components/NewProjectDialog";
+import { projects } from "@/data/projects";
 
+export default function ProjectsPage() {
   return (
     <main className="min-h-screen bg-gray-100 p-8">
       <h1 className="text-4xl font-bold mb-8">
         Projects
       </h1>
 
+      <NewProjectDialog />
+
       <div className="space-y-6">
         {projects.map((project) => (
-          <div
-            key={project.name}
-            className="bg-white rounded-xl shadow p-6"
+          <Link
+            href={`/projects/${project.id}`}
+            key={project.id}
           >
-            <h2 className="text-2xl font-bold">
-              {project.name}
-            </h2>
+            <div className="bg-white rounded-xl shadow hover:shadow-lg transition p-6 cursor-pointer">
+              <h2 className="text-2xl font-bold">
+                {project.name}
+              </h2>
 
-            <p className="text-gray-600 mt-2">
-              Status: {project.status}
-            </p>
+              <p className="mt-2 text-gray-600">
+                <strong>Client:</strong> {project.client}
+              </p>
 
-            <div className="flex gap-10 mt-4">
-              <p>📄 Drawings: {project.drawings}</p>
-              <p>❓ RFIs: {project.rfis}</p>
+              <p className="text-gray-600">
+                <strong>Location:</strong> {project.location}
+              </p>
+
+              <p className="text-gray-600">
+                <strong>Status:</strong> {project.status}
+              </p>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </main>
