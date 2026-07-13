@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { Project } from "@/types/project";
+
 import {
   Dialog,
   DialogContent,
@@ -14,25 +16,42 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export default function NewProjectDialog() {
+type Props = {
+  addProject: (project: Project) => void;
+};
+
+export default function NewProjectDialog({ addProject }: Props) {
   const [projectName, setProjectName] = useState("");
   const [client, setClient] = useState("");
   const [location, setLocation] = useState("");
 
   function handleSave() {
-    alert(
-      `Project Created!
+    if (!projectName || !client || !location) {
+      alert("Please fill in all fields.");
+      return;
+    }
 
-Name: ${projectName}
-Client: ${client}
-Location: ${location}`
-    );
+    const newProject: Project = {
+      id: Date.now().toString(),
+      name: projectName,
+      client,
+      location,
+      status: "Engineering",
+    };
+
+    addProject(newProject);
+
+    setProjectName("");
+    setClient("");
+    setLocation("");
+
+    alert("Project Created!");
   }
 
   return (
     <Dialog>
-      <DialogTrigger asChild>
-        <Button>+ New Project</Button>
+      <DialogTrigger render={<Button />}>
+        + New Project
       </DialogTrigger>
 
       <DialogContent>
@@ -41,10 +60,8 @@ Location: ${location}`
         </DialogHeader>
 
         <div className="space-y-4">
-
           <div>
             <Label>Project Name</Label>
-
             <Input
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
@@ -53,7 +70,6 @@ Location: ${location}`
 
           <div>
             <Label>Client</Label>
-
             <Input
               value={client}
               onChange={(e) => setClient(e.target.value)}
@@ -62,7 +78,6 @@ Location: ${location}`
 
           <div>
             <Label>Location</Label>
-
             <Input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
@@ -75,7 +90,6 @@ Location: ${location}`
           >
             Save Project
           </Button>
-
         </div>
       </DialogContent>
     </Dialog>

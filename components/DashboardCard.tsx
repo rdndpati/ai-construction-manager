@@ -1,23 +1,23 @@
-type DashboardCardProps = {
+type Props = {
   title: string;
   value: string;
-  emoji: string;
+  color?: string;
 };
 
 export default function DashboardCard({
   title,
   value,
-  emoji,
-}: DashboardCardProps) {
+  color = "bg-white",
+}: Props) {
   return (
-    <div className="bg-white rounded-xl shadow hover:shadow-lg transition p-6">
-      <div className="text-5xl">{emoji}</div>
-
-      <h2 className="text-xl font-bold mt-4">
+    <div
+      className={`${color} rounded-xl shadow p-6 hover:shadow-lg transition`}
+    >
+      <h3 className="text-gray-500 text-sm uppercase">
         {title}
-      </h2>
+      </h3>
 
-      <p className="text-gray-600 mt-2">
+      <p className="text-3xl font-bold mt-2">
         {value}
       </p>
     </div>

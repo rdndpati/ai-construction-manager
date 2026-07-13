@@ -4,7 +4,6 @@ export default function Sidebar() {
   const menu = [
     { name: "Dashboard", href: "/" },
     { name: "Projects", href: "/projects" },
-    { name: "Drawings", href: "/drawings" },
     { name: "RFIs", href: "/rfis" },
     { name: "TBPs", href: "/tbps" },
     { name: "Submittals", href: "/submittals" },
