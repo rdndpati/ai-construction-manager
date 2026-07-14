@@ -1,4 +1,5 @@
 import { supabase } from "./supabase";
+import { addActivity } from "./activity";
 
 export async function getRFIs(projectId: string) {
   const { data, error } = await supabase
@@ -26,6 +27,15 @@ export async function createRFI(rfi: any) {
     console.error(error);
     return null;
   }
+  await addActivity({
+    project_id: data.project_id,
+    drawing_id: data.drawing_id,
+    markup_id: data.markup_id,
+    rfi_id: data.id,
+    user_name: "Rakesh",
+    action: "Created RFI",
+    description: data.title,
+});
 
   return data;
 }

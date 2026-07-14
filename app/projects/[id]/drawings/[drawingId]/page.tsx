@@ -1,8 +1,10 @@
 "use client";
-import MarkupDialog from "@/components/drawings/MarkupDialog";
+import MarkupDialog from "@/components/MarkupDialog";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import NewRFIDialog from "@/components/NewRFIDialog";
+import { createRFI } from "@/lib/rfis";
 import { updateMarkupPosition } from "@/lib/markups";
 
 import { supabase } from "@/lib/supabase";
@@ -18,6 +20,11 @@ export default function DrawingViewerPage() {
   const [markups, setMarkups] = useState<any[]>([]);
   const [selectedMarkup, setSelectedMarkup] = useState<any>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [showCreateRFI, setShowCreateRFI] = useState(false);   
+
+  const [showMarkupDialog, setShowMarkupDialog] = useState(false);
+
+  const [showRFIDialog, setShowRFIDialog] = useState(false);
 
 
   useEffect(() => {
@@ -77,6 +84,15 @@ export default function DrawingViewerPage() {
       alert("Check browser console");
     }
   }
+  function openMarkup(markup: any) {
+  setSelectedMarkup(markup);
+
+  if (markup.rfi_id) {
+    window.location.href = `/projects/${projectId}/rfis`;
+  } else {
+    setShowCreateRFI(true);
+  }
+}
   async function handleDrop(
   e: React.MouseEvent<HTMLDivElement>
 ) {
@@ -189,21 +205,23 @@ export default function DrawingViewerPage() {
             />
 
            {markups.map((pin) => (
+
   <div
     key={pin.id}
-    draggable
-    onDragStart={() => setDraggingId(pin.id)}
     onClick={(e) => {
       e.stopPropagation();
+
       setSelectedMarkup(pin);
+
+      setShowMarkupDialog(true);
     }}
     style={{
       position: "absolute",
       left: pin.x,
       top: pin.y,
-      width: "18px",
-      height: "18px",
-      backgroundColor: "red",
+      width: 18,
+      height: 18,
+      background: "red",
       borderRadius: "50%",
       border: "2px solid white",
       transform: "translate(-50%, -50%)",
@@ -211,6 +229,7 @@ export default function DrawingViewerPage() {
       zIndex: 100,
     }}
   />
+
 ))}
 
           </div>
@@ -314,6 +333,93 @@ export default function DrawingViewerPage() {
       setSelectedMarkup(null);
     }}
   />
+)}
+{showCreateRFI && selectedMarkup && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+    <div className="bg-white rounded-xl p-8 w-[500px]">
+      <h2 className="text-2xl font-bold mb-4">
+        Create RFI for this markup?
+      </h2>
+
+      <p className="mb-6">
+        This pin doesn't have an RFI yet.
+      </p>
+
+      <button
+        className="bg-blue-600 text-white px-5 py-2 rounded"
+        onClick={() => {
+          window.location.href = `/projects/${projectId}/rfis`;
+        }}
+      >
+        Go to RFIs
+      </button>
+
+      <button
+        className="ml-3"
+        onClick={() => setShowCreateRFI(false)}
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+)}
+{showMarkupDialog && selectedMarkup && (
+
+  <MarkupDialog
+    markup={selectedMarkup}
+    onClose={() => setShowMarkupDialog(false)}
+
+    onSave={(updated) => {
+
+      setMarkups((prev) =>
+        prev.map((m) =>
+          m.id === updated.id ? updated : m
+        )
+      );
+
+      setShowMarkupDialog(false);
+    }}
+
+    onCreateRFI={() => {
+
+      setShowMarkupDialog(false);
+
+      setShowRFIDialog(true);
+
+    }}
+
+  />
+
+)}
+
+{showRFIDialog && (
+
+  <NewRFIDialog
+
+    onClose={() => setShowRFIDialog(false)}
+
+    onSave={async (form) => {
+
+      await createRFI({
+
+        ...form,
+
+        project_id: projectId,
+
+        drawing_id: drawingId,
+
+        markup_id: selectedMarkup.id,
+
+      });
+
+      alert("RFI Created!");
+
+      setShowRFIDialog(false);
+
+    }}
+
+  />
+
 )}
 
     </main>

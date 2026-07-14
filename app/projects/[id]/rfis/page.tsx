@@ -1,11 +1,13 @@
 "use client";
-
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { supabase } from "@/lib/supabase";
 import NewRFIDialog from "@/components/NewRFIDialog";
 
 export default function RFIPage() {
+  const params = useParams();
+  const projectId = params.id as string;
   const [rfis, setRfis] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -23,9 +25,14 @@ export default function RFIPage() {
   }, []);
 
   async function createRFI(form: any) {
-    const { error } = await supabase
-      .from("rfis")
-      .insert([form]);
+  const { error } = await supabase
+    .from("rfis")
+    .insert([
+      {
+        ...form,
+        project_id: projectId,
+      },
+    ]);
 
     if (!error) {
       setOpen(false);
@@ -76,7 +83,13 @@ export default function RFIPage() {
 
             {rfis.map((rfi) => (
 
-              <tr key={rfi.id} className="border-b">
+              <tr
+  key={rfi.id}
+  className="border-b hover:bg-gray-50 cursor-pointer"
+  onClick={() =>
+    window.location.href = `/projects/${projectId}/rfis/${rfi.id}`
+  }
+>
 
                 <td className="p-4">
                   {rfi.rfi_number}
