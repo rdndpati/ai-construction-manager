@@ -1,8 +1,10 @@
 "use client";
 import MarkupDialog from "@/components/MarkupDialog";
+import { getRevisions } from "@/lib/revisions";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import NewRevisionDialog from "@/components/NewRevisionDialog";
 import NewRFIDialog from "@/components/NewRFIDialog";
 import { createRFI } from "@/lib/rfis";
 import { updateMarkupPosition } from "@/lib/markups";
@@ -18,6 +20,8 @@ export default function DrawingViewerPage() {
 
   const [drawing, setDrawing] = useState<any>(null);
   const [markups, setMarkups] = useState<any[]>([]);
+  const [revisions,setRevisions]=useState<any[]>([]);
+  const [showRevisionDialog, setShowRevisionDialog] = useState(false);
   const [selectedMarkup, setSelectedMarkup] = useState<any>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [showCreateRFI, setShowCreateRFI] = useState(false);   
@@ -41,6 +45,9 @@ export default function DrawingViewerPage() {
       }
 
       setDrawing(data);
+      const revs = await getRevisions(data.id);
+setRevisions(revs);
+console.log("Loaded revisions:", revs);
 
       const pins = await getMarkups(drawingId);
       setMarkups(pins);
@@ -179,6 +186,12 @@ export default function DrawingViewerPage() {
           >
             ⛶ Full Screen
           </button>
+          <button
+    onClick={() => setShowRevisionDialog(true)}
+    className="bg-orange-600 text-white px-4 py-2 rounded-lg"
+>
+    + New Revision
+</button>
 
         </div>
 
@@ -281,6 +294,35 @@ export default function DrawingViewerPage() {
                 {drawing.status}
               </p>
             </div>
+            <hr className="my-6" />
+
+<h3 className="text-lg font-bold mb-4">
+    Revision History
+</h3>
+
+<div className="space-y-3">
+  <p className="text-red-500">
+  Total Revisions: {revisions.length}
+</p>
+ 
+    {revisions.map((rev:any)=>(
+    <div
+        key={rev.id}
+        className="border rounded-lg p-3 cursor-pointer hover:bg-gray-100"
+    >
+
+        <div className="font-semibold">
+            {rev.revision_number}
+        </div>
+
+        <div className="text-sm text-gray-500">
+            {rev.revision_date}
+        </div>
+
+    </div>
+))}
+
+</div>
 
             <div>
               <a
@@ -417,10 +459,38 @@ export default function DrawingViewerPage() {
       setShowRFIDialog(false);
 
     }}
+    
+  
 
   />
 
 )}
+{showRevisionDialog && (
+  <NewRevisionDialog
+  drawingId={drawing.id}
+  onClose={() => setShowRevisionDialog(false)}
+  onSave={async (revision) => {
+
+  const { data, error } = await supabase
+    .from("drawing_revisions")
+    .insert([revision]);
+
+  if (error) {
+    console.error(error);
+    alert(error.message);
+    return;
+  }
+
+  alert("Revision Saved!");
+
+  setShowRevisionDialog(false);
+
+  
+
+}}
+/>
+)}
+
 
     </main>
   );
