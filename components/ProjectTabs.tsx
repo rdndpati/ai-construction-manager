@@ -36,11 +36,17 @@ export default function ProjectTabs({ projectId }: Props) {
       </Link>
 
       <Link
-        href={`/projects/${projectId}/submittals`}
-        className="px-4 py-2 rounded-lg bg-gray-200"
-      >
-        Submittals
-      </Link>
+  href={`/submittals?project=${projectId}`}
+  className="px-4 py-2 rounded-lg bg-gray-200"
+>
+  Submittals
+</Link>
+<Link
+  href={`/projects/${projectId}/reports`}
+  className="px-4 py-2 rounded-lg bg-gray-200"
+>
+  Reports
+</Link>
 
       <Link
         href={`/projects/${projectId}/ai`}

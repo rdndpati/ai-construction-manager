@@ -2,16 +2,23 @@ import Link from "next/link";
 
 export default function Sidebar() {
   const menu = [
-    { name: "Dashboard", href: "/" },
-    { name: "Projects", href: "/projects" },
-    { name: "RFIs", href: "/rfis" },
-    { name: "TBPs", href: "/tbps" },
-    { name: "Submittals", href: "/submittals" },
-    { name: "IFC Revisions", href: "/ifc-revisions" },
-    { name: "AI Assistant", href: "/ai" },
-    { name: "Reports", href: "/reports" },
-    { name: "Settings", href: "/settings" },
-  ];
+  { name: "🏠 Dashboard", href: "/" },
+  { name: "📁 Projects", href: "/projects" },
+  { name: "👥 Company", href: "/company" },
+  { name: "📋 RFI Management", href: "/rfis" },
+  { name: "📦 TBPs", href: "/tbps" },
+  { name: "📄 Submittals", href: "/submittals" },
+
+  // 👇 Add this
+  { name: "📚 Specifications", href: "/specifications" },
+  {name: "✅ Compliance Checker",href: "/compliance",},
+  
+
+  
+  { name: "🤖 AI Assistant", href: "/ai" },
+  
+  { name: "⚙️ Settings", href: "/settings" },
+];
 
   return (
     <aside className="w-64 min-h-screen bg-slate-900 text-white p-6">

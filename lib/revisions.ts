@@ -22,5 +22,26 @@ export async function createRevision(revision: any) {
     return null;
   }
 
+  try {
+    const response = await fetch("/api/extract-drawing", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        pdfUrl: data.pdf_url,
+        drawingId: data.id,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error(result);
+    }
+  } catch (err) {
+    console.error("Extraction failed", err);
+  }
+
   return data;
 }

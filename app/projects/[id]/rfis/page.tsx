@@ -12,17 +12,25 @@ export default function RFIPage() {
   const [open, setOpen] = useState(false);
 
   async function loadRFIs() {
-    const { data } = await supabase
-      .from("rfis")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("rfis")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
 
-    setRfis(data ?? []);
+  if (error) {
+    console.error(error);
+    return;
   }
 
+  setRfis(data ?? []);
+}
+
   useEffect(() => {
+  if (projectId) {
     loadRFIs();
-  }, []);
+  }
+}, [projectId]);
 
   async function createRFI(form: any) {
   const { error } = await supabase

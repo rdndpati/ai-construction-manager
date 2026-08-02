@@ -12,11 +12,46 @@ type PageProps = {
 export default async function ProjectDetails({ params }: PageProps) {
   const { id } = await params;
 
+  // Load project
   const { data: project, error } = await supabase
     .from("projects")
     .select("*")
     .eq("id", id)
     .single();
+
+  // Load dashboard statistics
+  const [
+    drawings,
+    rfis,
+    submittals,
+    specifications,
+    compliance,
+  ] = await Promise.all([
+    supabase
+      .from("drawings")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", id),
+
+    supabase
+      .from("rfis")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", id),
+
+    supabase
+      .from("submittals")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", id),
+
+    supabase
+      .from("specifications")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", id),
+
+    supabase
+      .from("compliance_reports")
+      .select("*", { count: "exact", head: true })
+      .eq("project_id", id),
+  ]);
 
   if (error || !project) {
     return (
@@ -48,21 +83,56 @@ export default async function ProjectDetails({ params }: PageProps) {
         {project.name}
       </h1>
 
-      <p className="text-gray-600 mt-2">
-        {project.client} • {project.location} • {project.status}
-      </p>
+      <div className="flex gap-6 mt-3 text-gray-600">
+        <span>👤 {project.client}</span>
+        <span>📍 {project.location}</span>
+        <span className="font-semibold text-green-600">
+          🟢 {project.status}
+        </span>
+      </div>
 
       <ProjectTabs projectId={project.id} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8">
-        <DashboardCard title="Engineering" value="72%" />
-        <DashboardCard title="Drawings" value="1" />
-        <DashboardCard title="RFIs" value="0" />
-        <DashboardCard title="TBPs" value="0" />
-        <DashboardCard title="Submittals" value="0" />
-        <DashboardCard title="IFC Revisions" value="0" />
-        <DashboardCard title="Reports" value="0" />
-        <DashboardCard title="AI Assistant" value="Ready" />
+        <DashboardCard
+          title="Drawings"
+          value={drawings.count ?? 0}
+        />
+
+        <DashboardCard
+          title="RFIs"
+          value={rfis.count ?? 0}
+        />
+
+        <DashboardCard
+          title="Submittals"
+          value={submittals.count ?? 0}
+        />
+
+        <DashboardCard
+          title="Specifications"
+          value={specifications.count ?? 0}
+        />
+
+        <DashboardCard
+          title="Compliance"
+          value={compliance.count ?? 0}
+        />
+
+        <DashboardCard
+          title="Status"
+          value={project.status}
+        />
+
+        <DashboardCard
+          title="Client"
+          value={project.client}
+        />
+
+        <DashboardCard
+          title="Location"
+          value={project.location}
+        />
       </div>
 
       <div className="mt-10 bg-white rounded-xl shadow p-6">

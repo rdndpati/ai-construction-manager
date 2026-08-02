@@ -1,106 +1,133 @@
-"use client";
+import Link from "next/link";
+import { supabase } from "@/lib/supabase";
+import ProjectTabs from "@/components/ProjectTabs";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-
-import UploadDrawingDialog from "@/components/UploadDrawingDialog";
-import DrawingsTable from "@/components/drawings/DrawingsTable";
-
-import {
-  getDrawings,
-  updateDrawing,
-  deleteDrawing,
-} from "@/lib/drawings";
-
-type Drawing = {
-  id: string;
-  project_id: string;
-  number: string;
-  name: string;
-  revision: string;
-  status: string;
-  file_url?: string;
+type Props = {
+  params: Promise<{
+    id: string;
+  }>;
 };
 
-export default function DrawingsPage() {
-  const params = useParams();
-  const projectId = params.id as string;
+export default async function ProjectDrawings({ params }: Props) {
+  const { id } = await params;
 
-  const [drawings, setDrawings] = useState<Drawing[]>([]);
-  const [search, setSearch] = useState("");
+  const { data: project } = await supabase
+    .from("projects")
+    .select("*")
+    .eq("id", id)
+    .single();
 
-  useEffect(() => {
-    loadDrawings();
-  }, []);
-
-  async function loadDrawings() {
-    const data = await getDrawings(projectId);
-    setDrawings(data);
-  }
-
-  function addDrawing(drawing: Drawing) {
-    setDrawings((prev) => [drawing, ...prev]);
-  }
-
-  async function handleDelete(id: string) {
-    const ok = await deleteDrawing(id);
-
-    if (!ok) return;
-
-    setDrawings((prev) => prev.filter((d) => d.id !== id));
-  }
-
-  async function handleEdit(updated: Drawing) {
-    const saved = await updateDrawing(updated.id, {
-      number: updated.number,
-      name: updated.name,
-      revision: updated.revision,
-      status: updated.status,
-      file_url: updated.file_url,
-    });
-
-    if (!saved) return;
-
-    setDrawings((prev) =>
-      prev.map((d) => (d.id === saved.id ? saved : d))
-    );
-  }
-
-  const filtered = drawings.filter(
-    (d) =>
-      d.number.toLowerCase().includes(search.toLowerCase()) ||
-      d.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const { data: drawings } = await supabase
+    .from("drawings")
+    .select("*")
+    .eq("project_id", id)
+    .order("created_at", { ascending: false });
 
   return (
-    <main className="p-8">
+    <main className="min-h-screen bg-gray-100 p-8">
 
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Drawings</h1>
-          <p className="text-gray-500">
-            Project ID: {projectId}
-          </p>
-        </div>
+      <Link
+        href={`/projects/${id}`}
+        className="text-blue-600 hover:underline"
+      >
+        ← Back to Project
+      </Link>
 
-        <UploadDrawingDialog
-          projectId={projectId}
-          addDrawing={addDrawing}
-        />
+      <h1 className="text-4xl font-bold mt-4">
+        {project?.name} Drawings
+      </h1>
+
+      <ProjectTabs projectId={id} />
+
+      <div className="flex justify-between items-center mt-8">
+
+        <h2 className="text-2xl font-bold">
+          Drawings
+        </h2>
+
+        <Link
+  href={`/projects/${id}/drawings/new`}
+  className="bg-blue-600 text-white px-5 py-2 rounded-lg"
+>
+  + Upload Drawing
+</Link>
       </div>
 
-      <input
-        className="border rounded-lg p-3 w-80"
-        placeholder="Search drawings..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
+      <div className="mt-6 bg-white rounded-xl shadow">
 
-      <DrawingsTable
-        drawings={filtered}
-        onDelete={handleDelete}
-        onEdit={handleEdit}
-      />
+        <table className="w-full">
+
+          <thead className="border-b bg-gray-50">
+  <tr className="text-left">
+
+    <th className="p-4">Number</th>
+
+    <th className="p-4">Name</th>
+
+    <th className="p-4">Revision</th>
+
+    <th className="p-4">Status</th>
+
+    <th className="p-4">PDF</th>
+
+    <th className="p-4">Details</th>
+
+  </tr>
+</thead>
+
+          <tbody>
+
+            {drawings?.length ? (
+              drawings.map((drawing) => (
+                <tr
+  key={drawing.id}
+  className="border-b hover:bg-gray-50"
+>
+  <td className="p-4">{drawing.number}</td>
+
+  <td className="p-4">{drawing.name}</td>
+
+  <td className="p-4">{drawing.revision}</td>
+
+  <td className="p-4">{drawing.status}</td>
+
+  <td className="p-4">
+    <a
+      href={drawing.file_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 hover:underline"
+    >
+      View PDF
+    </a>
+  </td>
+
+  <td className="p-4">
+    <Link
+      href={`/projects/${id}/drawings/${drawing.id}`}
+      className="text-green-600 hover:underline"
+    >
+      Details
+    </Link>
+  </td>
+</tr>
+              ))
+            ) : (
+              <tr>
+                <td
+                  colSpan={3}
+                  className="text-center p-8 text-gray-500"
+                >
+                  No drawings found for this project.
+                </td>
+              </tr>
+            )}
+
+          </tbody>
+
+        </table>
+
+      </div>
 
     </main>
   );

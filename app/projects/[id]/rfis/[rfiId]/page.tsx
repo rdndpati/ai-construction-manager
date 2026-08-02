@@ -1,7 +1,7 @@
 "use client";
 import { getComments, createComment } from "@/lib/comments";
 import { useEffect, useState } from "react";
-import { getAttachments, uploadAttachment } from "@/lib/attachments";
+import { getAttachments, uploadAttachment, deleteAttachment } from "@/lib/attachments";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 
@@ -46,6 +46,7 @@ setAttachments(files);
       </main>
     );
   }
+  const actualProjectId = rfi.project_id;
   async function handleComment() {
   if (!newComment.trim()) return;
 
@@ -77,12 +78,51 @@ async function handleUpload(
 
   setUploading(false);
 }
+async function handleDeleteAttachment(
+  id: string,
+  fileUrl: string
+) {
+  const ok = window.confirm(
+    "Are you sure you want to delete this attachment?"
+  );
+
+  if (!ok) return;
+
+  const deleted = await deleteAttachment(id, fileUrl);
+
+  if (deleted) {
+    setAttachments((prev) =>
+      prev.filter((attachment) => attachment.id !== id)
+    );
+  }
+}
+async function handleSaveRFI() {
+  const { error } = await supabase
+    .from("rfis")
+    .update({
+      title: rfi.title,
+      status: rfi.status,
+      priority: rfi.priority,
+      due_date: rfi.due_date,
+      question: rfi.question,
+      response: rfi.response,
+    })
+    .eq("id", rfi.id);
+
+  if (error) {
+    alert("Failed to update RFI.");
+    console.error(error);
+    return;
+  }
+
+  alert("RFI updated successfully.");
+}
 
   return (
     <main className="p-8 bg-gray-100 min-h-screen">
 
       <Link
-        href={`/projects/${projectId}/rfis`}
+        href={`/projects/${actualProjectId}/rfis`}
         className="text-blue-600 hover:underline"
       >
         ← Back to RFIs
@@ -98,27 +138,76 @@ async function handleUpload(
               RFI #{rfi.rfi_number}
             </h1>
 
-            <p className="text-gray-500 mt-2">
-              {rfi.title}
-            </p>
+            <input
+  className="border rounded w-full mt-2 p-2"
+  value={rfi.title ?? ""}
+  onChange={(e) =>
+    setRFI({
+      ...rfi,
+      title: e.target.value,
+    })
+  }
+/>
 
           </div>
 
           <div className="text-right">
 
-            <p>
-              <strong>Status:</strong> {rfi.status}
-            </p>
+            <div className="mt-2">
+  <label className="font-semibold">Status</label>
 
-            <p>
-              <strong>Priority:</strong> {rfi.priority}
-            </p>
+  <select
+    className="border rounded w-full mt-1 p-2"
+    value={rfi.status}
+    onChange={(e) =>
+      setRFI({
+        ...rfi,
+        status: e.target.value,
+      })
+    }
+  >
+    <option>Open</option>
+    <option>In Review</option>
+    <option>Closed</option>
+  </select>
+</div>
 
-            <p>
-              <strong>Due:</strong> {rfi.due_date}
-            </p>
+<div className="mt-4">
+  <label className="font-semibold">Priority</label>
 
-          </div>
+  <select
+    className="border rounded w-full mt-1 p-2"
+    value={rfi.priority}
+    onChange={(e) =>
+      setRFI({
+        ...rfi,
+        priority: e.target.value,
+      })
+    }
+  >
+    <option>Low</option>
+    <option>Medium</option>
+    <option>High</option>
+    <option>Critical</option>
+  </select>
+</div>
+
+<div className="mt-4">
+  <label className="font-semibold">Due Date</label>
+
+  <input
+    type="date"
+    className="border rounded w-full mt-1 p-2"
+    value={rfi.due_date ?? ""}
+    onChange={(e) =>
+      setRFI({
+        ...rfi,
+        due_date: e.target.value,
+      })
+    }
+  />
+</div>
+</div>
 
         </div>
 
@@ -128,27 +217,50 @@ async function handleUpload(
           Question
         </h2>
 
-        <div className="border rounded p-4 min-h-[150px]">
-          {rfi.question || rfi.description || "No question yet."}
-        </div>
+        <textarea
+  className="border rounded w-full p-4 min-h-[150px]"
+  value={rfi.question || rfi.description || ""}
+  onChange={(e) =>
+    setRFI({
+      ...rfi,
+      question: e.target.value,
+    })
+  }
+/>
 
         <h2 className="text-xl font-bold mt-8 mb-3">
           Response
         </h2>
 
-        <div className="border rounded p-4 min-h-[150px]">
-          {rfi.response || "No response yet."}
-        </div>
+        <textarea
+  className="border rounded w-full p-4 min-h-[150px]"
+  value={rfi.response || ""}
+  onChange={(e) =>
+    setRFI({
+      ...rfi,
+      response: e.target.value,
+    })
+  }
+/>
 
         <div className="grid grid-cols-2 gap-6 mt-8">
 
           <div className="border rounded p-5">
 
             <h3 className="font-bold mb-2">
-              Linked Drawing
-            </h3>
+  Linked Drawing
+</h3>
 
-            <p>{rfi.drawing_id || "Not linked"}</p>
+<p className="mb-4">
+  {rfi.drawing_id || "Not linked"}
+</p>
+
+<Link
+  href={`/projects/${actualProjectId}/drawings/${rfi.drawing_id}?markup=${rfi.markup_id}`}
+  className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+>
+  📄 Open Drawing
+</Link> 
 
           </div>
 
@@ -165,6 +277,15 @@ async function handleUpload(
         </div>
 
       </div>
+      <div className="mt-8 flex justify-end">
+  <button
+    onClick={handleSaveRFI}
+    className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg"
+  >
+    💾 Save RFI
+  </button>
+</div>
+      
       <div className="mt-10 bg-white rounded-xl shadow p-6">
 
   <h2 className="text-2xl font-bold mb-5">
@@ -250,35 +371,51 @@ async function handleUpload(
 
     {attachments.map((file) => (
 
-      <div
-        key={file.id}
-        className="flex justify-between items-center border rounded p-3"
+  <div
+    key={file.id}
+    className="flex justify-between items-center border rounded p-3"
+  >
+
+    <div>
+
+      <p className="font-medium">
+        📄 {file.file_name}
+      </p>
+
+      <p className="text-sm text-gray-500">
+        {file.uploaded_by}
+      </p>
+
+    </div>
+
+    <div className="flex items-center gap-4">
+
+      <a
+        href={file.file_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 hover:underline"
       >
+        Open
+      </a>
 
-        <div>
+      <button
+        onClick={() =>
+          handleDeleteAttachment(
+            file.id,
+            file.file_url
+          )
+        }
+        className="text-red-600 hover:underline"
+      >
+        Delete
+      </button>
 
-          <p className="font-medium">
-            📄 {file.file_name}
-          </p>
+    </div>
 
-          <p className="text-sm text-gray-500">
-            {file.uploaded_by}
-          </p>
+  </div>
 
-        </div>
-
-        <a
-          href={file.file_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:underline"
-        >
-          Open
-        </a>
-
-      </div>
-
-    ))}
+))}
 
   </div>
 

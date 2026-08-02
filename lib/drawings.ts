@@ -12,7 +12,7 @@ export async function getDrawings(projectId: string) {
     return [];
   }
 
-  return data;
+  return data; 
 }
 
 export async function createDrawing(drawing: {

@@ -55,3 +55,35 @@ export async function getAttachments(rfiId: string) {
 
   return data;
 }
+export async function deleteAttachment(
+  id: string,
+  fileUrl: string
+) {
+  // Extract filename from the public URL
+  const filename = fileUrl.split("/").pop();
+
+  if (!filename) return false;
+
+  // Delete from Storage
+  const { error: storageError } = await supabase.storage
+    .from("rfi-files")
+    .remove([filename]);
+
+  if (storageError) {
+    console.error(storageError);
+    return false;
+  }
+
+  // Delete database record
+  const { error } = await supabase
+    .from("rfi_attachments")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error(error);
+    return false;
+  }
+
+  return true;
+}

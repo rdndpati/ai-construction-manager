@@ -1,6 +1,6 @@
 "use client";
-
 import { useState } from "react";
+import { uploadDrawingFile } from "@/lib/drawings";
 
 type Props = {
   drawingId: string;
@@ -69,16 +69,22 @@ export default function NewRevisionDialog({
         />
 
         <input
-          className="border w-full p-3 mb-6 rounded"
-          placeholder="PDF URL (temporary)"
-          value={form.pdf_url}
-          onChange={(e) =>
-            setForm({
-              ...form,
-              pdf_url: e.target.value,
-            })
-          }
-        />
+  type="file"
+  accept=".pdf"
+  className="mb-6"
+  onChange={async (e) => {
+    if (!e.target.files?.[0]) return;
+
+    const url = await uploadDrawingFile(e.target.files[0]);
+
+    if (url) {
+      setForm({
+        ...form,
+        pdf_url: url,
+      });
+    }
+  }}
+/>
 
         <div className="flex justify-end gap-3">
 

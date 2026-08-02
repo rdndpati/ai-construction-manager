@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { supabase } from "@/lib/supabase";
 
-import { Project } from "@/types/project";
 
 import {
   Dialog,
@@ -17,37 +17,44 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 type Props = {
-  addProject: (project: Project) => void;
+  onCreated: () => void;
 };
 
-export default function NewProjectDialog({ addProject }: Props) {
+export default function NewProjectDialog({
+  onCreated,
+}: Props) {
   const [projectName, setProjectName] = useState("");
   const [client, setClient] = useState("");
   const [location, setLocation] = useState("");
 
-  function handleSave() {
-    if (!projectName || !client || !location) {
-      alert("Please fill in all fields.");
-      return;
-    }
+  async function handleSave() {
+  if (!projectName || !client || !location) {
+    alert("Please fill in all fields.");
+    return;
+  }
 
-    const newProject: Project = {
-      id: Date.now().toString(),
+  const { error } = await supabase
+    .from("projects")
+    .insert({
       name: projectName,
       client,
       location,
       status: "Engineering",
-    };
+    });
 
-    addProject(newProject);
-
-    setProjectName("");
-    setClient("");
-    setLocation("");
-
-    alert("Project Created!");
+  if (error) {
+    alert(error.message);
+    return;
   }
 
+  setProjectName("");
+  setClient("");
+  setLocation("");
+
+  onCreated();
+
+  alert("Project Created!");
+}
   return (
     <Dialog>
       <DialogTrigger render={<Button />}>

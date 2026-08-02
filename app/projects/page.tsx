@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ProjectsClient from "@/components/ProjectsClient";
 import { supabase } from "@/lib/supabase";
 import ProjectCard from "@/components/ProjectCard";
 
@@ -40,17 +41,11 @@ console.log("Error:", error);
 
       </div>
 
-      <div className="grid gap-6 mt-8">
-
-        {projects?.map((project) => (
-          <ProjectCard
-            key={project.id}
-            project={project}
-          />
-        ))}
-
-      </div>
-
+      <div className="mt-8">
+  <ProjectsClient
+    initialProjects={projects ?? []}
+  />
+</div>
     </main>
   );
 }
