@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function NewSubmittalPage() {
+function NewSubmittalContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const projectId = searchParams.get("project");
+
   const [form, setForm] = useState({
     submittal_number: "",
     title: "",
@@ -24,14 +26,15 @@ export default function NewSubmittalPage() {
 
   async function handleCreate() {
     console.log("Project ID:", projectId);
+
     const { error } = await supabase
-  .from("submittals")
-  .insert([
-    {
-      ...form,
-      project_id: projectId,
-    },
-  ]);
+      .from("submittals")
+      .insert([
+        {
+          ...form,
+          project_id: projectId,
+        },
+      ]);
 
     if (error) {
       console.error(error);
@@ -40,16 +43,16 @@ export default function NewSubmittalPage() {
     }
 
     alert("Submittal created successfully.");
+
     if (projectId) {
-  router.push(`/submittals?project=${projectId}`);
-} else {
-  router.push("/submittals");
-}
+      router.push(`/submittals?project=${projectId}`);
+    } else {
+      router.push("/submittals");
+    }
   }
 
   return (
     <main className="max-w-4xl mx-auto p-8">
-
       <h1 className="text-3xl font-bold mb-8">
         New Submittal
       </h1>
@@ -61,10 +64,7 @@ export default function NewSubmittalPage() {
           placeholder="Submittal Number"
           value={form.submittal_number}
           onChange={(e) =>
-            setForm({
-              ...form,
-              submittal_number: e.target.value,
-            })
+            setForm({ ...form, submittal_number: e.target.value })
           }
         />
 
@@ -73,10 +73,7 @@ export default function NewSubmittalPage() {
           placeholder="Title"
           value={form.title}
           onChange={(e) =>
-            setForm({
-              ...form,
-              title: e.target.value,
-            })
+            setForm({ ...form, title: e.target.value })
           }
         />
 
@@ -85,10 +82,7 @@ export default function NewSubmittalPage() {
           placeholder="Vendor"
           value={form.vendor}
           onChange={(e) =>
-            setForm({
-              ...form,
-              vendor: e.target.value,
-            })
+            setForm({ ...form, vendor: e.target.value })
           }
         />
 
@@ -97,10 +91,7 @@ export default function NewSubmittalPage() {
           placeholder="Manufacturer"
           value={form.manufacturer}
           onChange={(e) =>
-            setForm({
-              ...form,
-              manufacturer: e.target.value,
-            })
+            setForm({ ...form, manufacturer: e.target.value })
           }
         />
 
@@ -171,16 +162,21 @@ export default function NewSubmittalPage() {
       />
 
       <div className="mt-8 flex justify-end">
-
         <button
           onClick={handleCreate}
           className="bg-blue-600 text-white px-6 py-3 rounded-lg"
         >
           Create Submittal
         </button>
-
       </div>
-
     </main>
+  );
+}
+
+export default function NewSubmittalPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading...</div>}>
+      <NewSubmittalContent />
+    </Suspense>
   );
 }
