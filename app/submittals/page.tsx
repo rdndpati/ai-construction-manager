@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-export default function SubmittalsPage() {
+function SubmittalsContent() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("project");
 
@@ -272,5 +272,12 @@ return matchesSearch && matchesStatus;
       </div>
 
     </main>
+  );
+}
+export default function SubmittalsPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading Submittals...</div>}>
+      <SubmittalsContent />
+    </Suspense>
   );
 }
