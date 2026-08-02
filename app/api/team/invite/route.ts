@@ -14,8 +14,12 @@ export async function POST(request: Request) {
     } = body;
 
     // Send invitation email through Supabase Auth
-    const { data, error } =
-      await supabaseAdmin.auth.admin.inviteUserByEmail(email);
+    // Send invitation email through Supabase Auth
+const { data, error } =
+  await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    redirectTo:
+      "https://ai-construction-manager-three.vercel.app/invite",
+  });
 
     if (error) {
       return NextResponse.json(
