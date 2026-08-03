@@ -33,6 +33,29 @@ export default function NewProjectDialog({
     return;
   }
 
+  // Get logged-in user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    alert("Please login again.");
+    return;
+  }
+
+  // Get user's company
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+
+  if (profileError || !profile?.company_id) {
+    alert("Company not found.");
+    return;
+  }
+
+  // Create project
   const { error } = await supabase
     .from("projects")
     .insert({
@@ -40,6 +63,7 @@ export default function NewProjectDialog({
       client,
       location,
       status: "Engineering",
+      company_id: profile.company_id,
     });
 
   if (error) {
