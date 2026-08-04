@@ -11,16 +11,21 @@ export default async function ProjectsPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  console.log("SERVER USER:", user);
+
   if (!user) {
     redirect("/login");
   }
 
-  // Get user's profile
+  // Get user's company
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("company_id")
     .eq("id", user.id)
     .single();
+
+  console.log("SERVER PROFILE:", profile);
+  console.log("PROFILE ERROR:", profileError);
 
   if (profileError || !profile?.company_id) {
     return (
@@ -38,6 +43,9 @@ export default async function ProjectsPage() {
     .select("*")
     .eq("company_id", profile.company_id)
     .order("created_at", { ascending: false });
+
+  console.log("PROJECTS:", projects);
+  console.log("PROJECT ERROR:", error);
 
   if (error) {
     return (
