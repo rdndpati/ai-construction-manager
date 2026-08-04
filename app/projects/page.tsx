@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import ProjectsClient from "@/components/ProjectsClient";
 import { createClient } from "@/lib/supabase/server";
+import ProjectsClient from "@/components/ProjectsClient";
 
 export default async function ProjectsPage() {
   const supabase = await createClient();
@@ -9,11 +9,12 @@ export default async function ProjectsPage() {
   // Get logged-in user
   const {
     data: { user },
+    error: userError,
   } = await supabase.auth.getUser();
 
   console.log("SERVER USER:", user);
 
-  if (!user) {
+  if (userError || !user) {
     redirect("/login");
   }
 
@@ -25,14 +26,21 @@ export default async function ProjectsPage() {
     .single();
 
   console.log("SERVER PROFILE:", profile);
-  console.log("PROFILE ERROR:", profileError);
 
-  if (profileError || !profile?.company_id) {
+  if (profileError) {
+    console.log(profileError);
+  }
+
+  if (!profile?.company_id) {
     return (
       <main className="p-8">
         <h1 className="text-3xl font-bold">
           Company not found
         </h1>
+
+        <p className="mt-4 text-gray-600">
+          Your account is not assigned to a company.
+        </p>
       </main>
     );
   }
@@ -61,7 +69,9 @@ export default async function ProjectsPage() {
 
   return (
     <main className="min-h-screen bg-gray-100 p-8">
+
       <div className="flex justify-between items-center">
+
         <h1 className="text-4xl font-bold">
           Projects
         </h1>
@@ -72,11 +82,15 @@ export default async function ProjectsPage() {
         >
           Dashboard
         </Link>
+
       </div>
 
       <div className="mt-8">
-        <ProjectsClient initialProjects={projects ?? []} />
+        <ProjectsClient
+          initialProjects={projects ?? []}
+        />
       </div>
+
     </main>
   );
 }
