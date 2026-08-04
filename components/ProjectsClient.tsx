@@ -1,101 +1,78 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import ProjectsClient from "@/components/ProjectsClient";
-import { createClient } from "@/lib/supabase/server";
 
-export default async function ProjectsPage() {
-  const supabase = await createClient();
+type Project = {
+  id: string;
+  name: string;
+  client: string;
+  location: string;
+  status: string;
+};
 
-  // Get logged-in user
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+export default function ProjectsClient({
+  initialProjects,
+}: {
+  initialProjects: Project[];
+}) {
+  const [projects] = useState(initialProjects);
 
-  console.log("======================================");
-  console.log("SERVER USER:", user);
-  console.log("USER ERROR:", userError);
-  console.log("======================================");
-
-  if (userError || !user) {
-    console.log("❌ No logged in user");
-    redirect("/login");
-  }
-
-  // Get user's profile
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
-
-  console.log("======================================");
-  console.log("SERVER PROFILE:", profile);
-  console.log("PROFILE ERROR:", profileError);
-  console.log("======================================");
-
-  if (profileError || !profile || !profile.company_id) {
-    console.log("❌ Company not found");
-
+  if (projects.length === 0) {
     return (
-      <main className="p-8">
-        <h1 className="text-3xl font-bold">
-          Company not found
-        </h1>
+      <div className="bg-white rounded-xl shadow p-8 text-center">
+        <h2 className="text-2xl font-bold">
+          No Projects Found
+        </h2>
 
-        <pre className="mt-4 text-red-600">
-          {JSON.stringify(profileError, null, 2)}
-        </pre>
-      </main>
-    );
-  }
-
-  console.log("Current Company:", profile.company_id);
-
-  // Load only this company's projects
-  const { data: projects, error } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("company_id", profile.company_id)
-    .order("created_at", { ascending: false });
-
-  console.log("======================================");
-  console.log("PROJECT QUERY COMPANY:", profile.company_id);
-  console.log("PROJECTS:", projects);
-  console.log("PROJECT ERROR:", error);
-  console.log("PROJECT COUNT:", projects?.length);
-  console.log("======================================");
-
-  if (error) {
-    return (
-      <main className="p-8">
-        <h1 className="text-3xl font-bold">
-          Error Loading Projects
-        </h1>
-
-        <p>{error.message}</p>
-      </main>
+        <p className="text-gray-500 mt-2">
+          Create your first project.
+        </p>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-4xl font-bold">
-          Projects
-        </h1>
+    <div className="grid gap-6">
 
-        <Link
-          href="/"
-          className="bg-blue-600 text-white px-5 py-2 rounded-lg"
+      {projects.map((project) => (
+
+        <div
+          key={project.id}
+          className="bg-white rounded-xl shadow p-6"
         >
-          Dashboard
-        </Link>
-      </div>
 
-      <div className="mt-8">
-        <ProjectsClient initialProjects={projects ?? []} />
-      </div>
-    </main>
+          <h2 className="text-2xl font-bold">
+            {project.name}
+          </h2>
+
+          <p className="text-gray-600 mt-2">
+            Client: {project.client}
+          </p>
+
+          <p className="text-gray-600">
+            Location: {project.location}
+          </p>
+
+          <span className="inline-block mt-4 bg-blue-600 text-white px-3 py-1 rounded-full">
+            {project.status}
+          </span>
+
+          <div className="mt-6">
+
+            <Link
+              href={`/projects/${project.id}`}
+              className="text-blue-600 font-semibold"
+            >
+              Open Project →
+            </Link>
+
+          </div>
+
+        </div>
+
+      ))}
+
+    </div>
   );
 }
