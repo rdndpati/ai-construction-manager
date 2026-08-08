@@ -7,6 +7,7 @@ export const projects: Project[] = [
     client: "Lightsource BP",
     location: "Texas",
     status: "Construction",
+    progress: 65,
   },
   {
     id: "2",
@@ -14,6 +15,7 @@ export const projects: Project[] = [
     client: "TVA",
     location: "Tennessee",
     status: "Engineering",
+    progress: 40,
   },
   {
     id: "3",
@@ -21,6 +23,7 @@ export const projects: Project[] = [
     client: "NextEra Energy",
     location: "Texas",
     status: "Design",
+    progress: 25,
   },
   {
     id: "4",
@@ -28,6 +31,7 @@ export const projects: Project[] = [
     client: "Invenergy",
     location: "Arizona",
     status: "Permitting",
+    progress: 15,
   },
   {
     id: "5",
@@ -35,5 +39,6 @@ export const projects: Project[] = [
     client: "PG&E",
     location: "California",
     status: "Completed",
+    progress: 100,
   },
 ];
