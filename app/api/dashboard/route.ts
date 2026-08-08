@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/server";
 
 export async function GET() {
+  const supabase = await createClient();
 
   const [
     projects,
@@ -9,18 +10,27 @@ export async function GET() {
     rfis,
     submittals,
     specifications,
-    compliance
+    compliance,
   ] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("*", { count: "exact", head: true }),
 
-    supabase.from("projects").select("*", { count: "exact", head: true }),
+    supabase
+      .from("drawings")
+      .select("*", { count: "exact", head: true }),
 
-    supabase.from("drawings").select("*", { count: "exact", head: true }),
+    supabase
+      .from("rfis")
+      .select("*", { count: "exact", head: true }),
 
-    supabase.from("rfis").select("*", { count: "exact", head: true }),
+    supabase
+      .from("submittals")
+      .select("*", { count: "exact", head: true }),
 
-    supabase.from("submittals").select("*", { count: "exact", head: true }),
-
-    supabase.from("specifications").select("*", { count: "exact", head: true }),
+    supabase
+      .from("specifications")
+      .select("*", { count: "exact", head: true }),
 
     supabase
       .from("compliance_reports")
@@ -28,19 +38,11 @@ export async function GET() {
   ]);
 
   return NextResponse.json({
-
     projects: projects.count ?? 0,
-
     drawings: drawings.count ?? 0,
-
     rfis: rfis.count ?? 0,
-
     submittals: submittals.count ?? 0,
-
     specifications: specifications.count ?? 0,
-
     compliance: compliance.count ?? 0,
-
   });
-
 }

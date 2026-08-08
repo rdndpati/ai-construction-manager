@@ -5,4 +5,5 @@ export interface Project {
   location: string;
   status: string;
   created_at?: string;
+  progress: number;
 }

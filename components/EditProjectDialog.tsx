@@ -29,91 +29,136 @@ export default function EditProjectDialog({
   const [client, setClient] = useState(project.client);
   const [location, setLocation] = useState(project.location);
   const [status, setStatus] = useState(project.status);
+  const [saving, setSaving] = useState(false);
+  const [progress, setProgress] = useState(project.progress ?? 0);
 
   async function handleUpdate() {
-    const { error } = await supabase
-      .from("projects")
-      .update({
-        name,
-        client,
-        location,
-        status,
-      })
-      .eq("id", project.id);
+    setSaving(true);
 
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      // Verify user is logged in
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        alert("Please log in again.");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("projects")
+        .update({
+  name,
+  client,
+  location,
+  status,
+  progress,
+})
+        .eq("id", project.id);
+
+      if (error) {
+        console.error(error);
+        alert(error.message);
+        return;
+      }
+
+      onUpdated();
+    } finally {
+      setSaving(false);
     }
-
-    onUpdated();
   }
 
   return (
-    <Dialog>
-      <DialogTrigger
-  className="border rounded-md px-4 py-2 hover:bg-gray-100 cursor-pointer"
->
-  ✏️ Edit
-</DialogTrigger>
+  <Dialog>
 
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit Project</DialogTitle>
-        </DialogHeader>
+    <DialogTrigger className="border rounded-md px-4 py-2 hover:bg-gray-100 cursor-pointer">
+      ✏️ Edit
+    </DialogTrigger>
 
-        <div className="space-y-4">
+    <DialogContent>
 
-          <div>
-            <Label>Project Name</Label>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
+      <DialogHeader>
+        <DialogTitle>Edit Project</DialogTitle>
+      </DialogHeader>
 
-          <div>
-            <Label>Client</Label>
-            <Input
-              value={client}
-              onChange={(e) => setClient(e.target.value)}
-            />
-          </div>
+      <div className="space-y-4">
 
-          <div>
-            <Label>Location</Label>
-            <Input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            />
-          </div>
+        <div>
+          <Label>Project Name</Label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
 
-          <div>
-            <Label>Status</Label>
+        <div>
+          <Label>Client</Label>
+          <Input
+            value={client}
+            onChange={(e) => setClient(e.target.value)}
+          />
+        </div>
 
-            <select
-              className="w-full border rounded-md p-2"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option>Planning</option>
-              <option>Engineering</option>
-              <option>Construction</option>
-              <option>Commissioning</option>
-              <option>Completed</option>
-            </select>
+        <div>
+          <Label>Location</Label>
+          <Input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+          />
+        </div>
 
-          </div>
+        <div>
+          <Label>Status</Label>
 
-          <Button
-            className="w-full"
-            onClick={handleUpdate}
+          <select
+            className="w-full border rounded-md p-2"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
           >
-            Save Changes
-          </Button>
+            <option>Planning</option>
+            <option>Engineering</option>
+            <option>Construction</option>
+            <option>Commissioning</option>
+            <option>Completed</option>
+          </select>
 
         </div>
-      </DialogContent>
-    </Dialog>
-  );
+        <div>
+  <Label>Project Progress (%)</Label>
+
+  <Input
+    type="number"
+    min="0"
+    max="100"
+    value={progress}
+    onChange={(e) => {
+      const value = Math.min(
+        100,
+        Math.max(0, Number(e.target.value))
+      );
+
+      setProgress(value);
+    }}
+  />
+
+  <p className="text-sm text-gray-500 mt-1">
+    Enter a value from 0% to 100%.
+  </p>
+</div>
+
+        <Button
+          className="w-full"
+          onClick={handleUpdate}
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Save Changes"}
+        </Button>
+
+      </div>
+
+    </DialogContent>
+
+  </Dialog>
+);
 }

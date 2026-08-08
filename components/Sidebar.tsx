@@ -3,15 +3,15 @@ import Link from "next/link";
 export default function Sidebar() {
   const menu = [
   { name: "🏠 Dashboard", href: "/" },
-  { name: "📁 Projects", href: "/projects" },
-  { name: "👥 Company", href: "/company" },
-  { name: "📋 RFI Management", href: "/rfis" },
+  { name: "📁 Projects", href: "/app/projects" },
+  { name: "👥 Company", href: "/app/company" },
+  { name: "📋 RFI Management", href: "/app/rfis" },
   { name: "📦 TBPs", href: "/tbps" },
-  { name: "📄 Submittals", href: "/submittals" },
+  { name: "📄 Submittals", href: "/app/submittals" },
 
   // 👇 Add this
-  { name: "📚 Specifications", href: "/specifications" },
-  {name: "✅ Compliance Checker",href: "/compliance",},
+  { name: "📚 Specifications", href: "/app/specifications" },
+  {name: "✅ Compliance Checker",href: "/app/compliance",},
   
 
   

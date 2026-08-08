@@ -20,13 +20,24 @@ export default function DeleteProjectDialog({
 
     if (!confirmed) return;
 
+    // Verify user is logged in
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert("Please log in again.");
+      return;
+    }
+
     const { error } = await supabase
       .from("projects")
       .delete()
       .eq("id", project.id);
 
     if (error) {
-      alert(error.message);
+      console.error(error);
+      alert("Unable to delete project.");
       return;
     }
 
