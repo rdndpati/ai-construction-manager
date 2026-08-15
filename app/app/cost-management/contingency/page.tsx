@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
@@ -39,10 +45,10 @@ type ContingencyPermissions = {
 };
 
 // =========================================================
-// PAGE
+// PAGE CONTENT
 // =========================================================
 
-export default function ContingencyPage() {
+function ContingencyContent() {
   const searchParams = useSearchParams();
 
   const projectFromUrl =
@@ -154,9 +160,9 @@ export default function ContingencyPage() {
   const [status, setStatus] =
     useState("Active");
 
-  // =========================================================
+  // =======================================================
   // LOCK BACKGROUND SCROLLING
-  // =========================================================
+  // =======================================================
 
   useEffect(() => {
     const modalOpen =
@@ -230,10 +236,6 @@ export default function ContingencyPage() {
 
       setProjects(projectList);
 
-      // =====================================================
-      // SELECT PROJECT
-      // =====================================================
-
       if (projectList.length > 0) {
         setSelectedProject(
           (current) => {
@@ -253,10 +255,6 @@ export default function ContingencyPage() {
         setSelectedProject("");
       }
 
-      // =====================================================
-      // PERMISSIONS
-      // =====================================================
-
       const [
         view,
         create,
@@ -268,22 +266,18 @@ export default function ContingencyPage() {
           "Contingency",
           "view"
         ),
-
         hasPermission(
           "Contingency",
           "create"
         ),
-
         hasPermission(
           "Contingency",
           "edit"
         ),
-
         hasPermission(
           "Contingency",
           "delete"
         ),
-
         hasPermission(
           "Contingency",
           "manage"
@@ -305,8 +299,7 @@ export default function ContingencyPage() {
         view,
         create,
         edit,
-        delete:
-          deletePermission,
+        delete: deletePermission,
         manage,
       });
     } catch (error) {
@@ -353,10 +346,6 @@ export default function ContingencyPage() {
     canView,
   ]);
 
-  // =========================================================
-  // LOAD PROJECT DATA
-  // =========================================================
-
   async function loadProjectData() {
     try {
       setLoadingEntries(true);
@@ -375,9 +364,7 @@ export default function ContingencyPage() {
   // =========================================================
 
   async function loadEntries() {
-    if (!selectedProject) {
-      return;
-    }
+    if (!selectedProject) return;
 
     const {
       data,
@@ -421,9 +408,7 @@ export default function ContingencyPage() {
   // =========================================================
 
   async function loadDeletedEntries() {
-    if (!selectedProject) {
-      return;
-    }
+    if (!selectedProject) return;
 
     const {
       data,
@@ -464,7 +449,7 @@ export default function ContingencyPage() {
   }
 
   // =========================================================
-  // VIEW BUTTON
+  // VIEW
   // =========================================================
 
   function handleViewButton() {
@@ -472,7 +457,6 @@ export default function ContingencyPage() {
       alert(
         "You do not have permission to view Contingency."
       );
-
       return;
     }
 
@@ -489,7 +473,7 @@ export default function ContingencyPage() {
   }
 
   // =========================================================
-  // CREATE BUTTON
+  // CREATE
   // =========================================================
 
   function handleCreateButton() {
@@ -497,7 +481,7 @@ export default function ContingencyPage() {
   }
 
   // =========================================================
-  // EDIT BUTTON
+  // EDIT
   // =========================================================
 
   function handleEditButton() {
@@ -505,7 +489,6 @@ export default function ContingencyPage() {
       alert(
         "You do not have permission to edit Contingency entries."
       );
-
       return;
     }
 
@@ -513,7 +496,6 @@ export default function ContingencyPage() {
       alert(
         "There are no active Contingency entries to edit."
       );
-
       return;
     }
 
@@ -521,7 +503,7 @@ export default function ContingencyPage() {
   }
 
   // =========================================================
-  // DELETE / RESTORE BUTTON
+  // DELETE / RESTORE
   // =========================================================
 
   function handleDeleteRestoreButton() {
@@ -529,7 +511,6 @@ export default function ContingencyPage() {
       alert(
         "You do not have permission to delete or restore Contingency entries."
       );
-
       return;
     }
 
@@ -537,7 +518,7 @@ export default function ContingencyPage() {
   }
 
   // =========================================================
-  // MANAGE BUTTON
+  // MANAGE
   // =========================================================
 
   function handleManageButton() {
@@ -545,7 +526,6 @@ export default function ContingencyPage() {
       alert(
         "You do not have permission to manage Contingency."
       );
-
       return;
     }
 
@@ -557,15 +537,13 @@ export default function ContingencyPage() {
   // =========================================================
 
   async function handleRefresh() {
-    if (!canView) {
-      return;
-    }
+    if (!canView) return;
 
     await loadProjectData();
   }
 
   // =========================================================
-  // OPEN ADD FORM
+  // OPEN ADD
   // =========================================================
 
   function openAddForm() {
@@ -573,27 +551,19 @@ export default function ContingencyPage() {
       alert(
         "You do not have permission to create Contingency entries."
       );
-
       return;
     }
 
     setEditingId(null);
-
-    setEntryType(
-      "Allocation"
-    );
-
+    setEntryType("Allocation");
     setAmount("");
-
     setDescription("");
-
     setStatus("Active");
-
     setShowForm(true);
   }
 
   // =========================================================
-  // OPEN EDIT FORM
+  // OPEN EDIT
   // =========================================================
 
   function openEditForm(
@@ -603,7 +573,6 @@ export default function ContingencyPage() {
       alert(
         "You do not have permission to edit Contingency entries."
       );
-
       return;
     }
 
@@ -611,44 +580,25 @@ export default function ContingencyPage() {
       alert(
         "Deleted Contingency entries cannot be edited. Restore the entry first."
       );
-
       return;
     }
 
-    setEditingId(
-      entry.id
-    );
-
-    setEntryType(
-      entry.entry_type
-    );
-
+    setEditingId(entry.id);
+    setEntryType(entry.entry_type);
     setAmount(
-      String(
-        entry.amount ?? 0
-      )
+      String(entry.amount ?? 0)
     );
-
     setDescription(
       entry.description ?? ""
     );
-
-    setStatus(
-      entry.status
-    );
-
+    setStatus(entry.status);
     setShowForm(true);
   }
-
-  // =========================================================
-  // SELECT ENTRY FOR EDIT
-  // =========================================================
 
   function selectEntryForEdit(
     entry: ContingencyEntry
   ) {
     setShowEditSelector(false);
-
     openEditForm(entry);
   }
 
@@ -657,33 +607,22 @@ export default function ContingencyPage() {
   // =========================================================
 
   async function handleSave() {
-    if (
-      editingId &&
-      !canEdit
-    ) {
+    if (editingId && !canEdit) {
       alert(
         "You do not have permission to edit Contingency entries."
       );
-
       return;
     }
 
-    if (
-      !editingId &&
-      !canCreate
-    ) {
+    if (!editingId && !canCreate) {
       alert(
         "You do not have permission to create Contingency entries."
       );
-
       return;
     }
 
     if (!selectedProject) {
-      alert(
-        "Please select a project."
-      );
-
+      alert("Please select a project.");
       return;
     }
 
@@ -694,7 +633,6 @@ export default function ContingencyPage() {
       alert(
         "Please enter a valid amount."
       );
-
       return;
     }
 
@@ -702,59 +640,40 @@ export default function ContingencyPage() {
       setSaving(true);
 
       const {
-        data: {
-          user,
-        },
+        data: { user },
       } =
         await supabase.auth.getUser();
 
       if (!user) {
-        alert(
-          "You are not logged in."
-        );
-
+        alert("You are not logged in.");
         return;
       }
 
-      // ===================================================
-      // UPDATE
-      // ===================================================
-
       if (editingId) {
-        const {
-          error,
-        } = await supabase
-          .from(
-            "contingency_entries"
-          )
-          .update({
-            entry_type:
-              entryType,
-
-            amount:
-              Number(amount),
-
-            description:
-              description.trim() ||
-              null,
-
-            status,
-
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq(
-            "id",
-            editingId
-          )
-          .eq(
-            "project_id",
-            selectedProject
-          )
-          .is(
-            "deleted_at",
-            null
-          );
+        const { error } =
+          await supabase
+            .from(
+              "contingency_entries"
+            )
+            .update({
+              entry_type: entryType,
+              amount: Number(amount),
+              description:
+                description.trim() ||
+                null,
+              status,
+              updated_at:
+                new Date().toISOString(),
+            })
+            .eq("id", editingId)
+            .eq(
+              "project_id",
+              selectedProject
+            )
+            .is(
+              "deleted_at",
+              null
+            );
 
         if (error) {
           console.error(
@@ -762,51 +681,31 @@ export default function ContingencyPage() {
             error
           );
 
-          alert(
-            error.message
-          );
-
+          alert(error.message);
           return;
         }
 
         alert(
           "Contingency entry updated successfully."
         );
-      }
-
-      // ===================================================
-      // CREATE
-      // ===================================================
-
-      else {
-        const {
-          error,
-        } = await supabase
-          .from(
-            "contingency_entries"
-          )
-          .insert({
-            project_id:
-              selectedProject,
-
-            entry_type:
-              entryType,
-
-            amount:
-              Number(amount),
-
-            description:
-              description.trim() ||
-              null,
-
-            status,
-
-            created_by:
-              user.id,
-
-            deleted_at:
-              null,
-          });
+      } else {
+        const { error } =
+          await supabase
+            .from(
+              "contingency_entries"
+            )
+            .insert({
+              project_id:
+                selectedProject,
+              entry_type: entryType,
+              amount: Number(amount),
+              description:
+                description.trim() ||
+                null,
+              status,
+              created_by: user.id,
+              deleted_at: null,
+            });
 
         if (error) {
           console.error(
@@ -814,10 +713,7 @@ export default function ContingencyPage() {
             error
           );
 
-          alert(
-            error.message
-          );
-
+          alert(error.message);
           return;
         }
 
@@ -827,19 +723,10 @@ export default function ContingencyPage() {
       }
 
       setEditingId(null);
-
       setAmount("");
-
       setDescription("");
-
-      setEntryType(
-        "Allocation"
-      );
-
-      setStatus(
-        "Active"
-      );
-
+      setEntryType("Allocation");
+      setStatus("Active");
       setShowForm(false);
 
       await Promise.all([
@@ -872,7 +759,6 @@ export default function ContingencyPage() {
       alert(
         "You do not have permission to delete Contingency entries."
       );
-
       return;
     }
 
@@ -881,38 +767,31 @@ export default function ContingencyPage() {
         "Are you sure you want to delete this contingency entry? It will move to the Deleted list and can be restored later."
       );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
       setDeleting(true);
 
-      const {
-        error,
-      } = await supabase
-        .from(
-          "contingency_entries"
-        )
-        .update({
-          deleted_at:
-            new Date().toISOString(),
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          "id",
-          id
-        )
-        .eq(
-          "project_id",
-          selectedProject
-        )
-        .is(
-          "deleted_at",
-          null
-        );
+      const { error } =
+        await supabase
+          .from(
+            "contingency_entries"
+          )
+          .update({
+            deleted_at:
+              new Date().toISOString(),
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq(
+            "project_id",
+            selectedProject
+          )
+          .is(
+            "deleted_at",
+            null
+          );
 
       if (error) {
         console.error(
@@ -920,10 +799,7 @@ export default function ContingencyPage() {
           error
         );
 
-        alert(
-          error.message
-        );
-
+        alert(error.message);
         return;
       }
 
@@ -966,7 +842,6 @@ export default function ContingencyPage() {
       alert(
         "You do not have permission to restore Contingency entries."
       );
-
       return;
     }
 
@@ -975,39 +850,31 @@ export default function ContingencyPage() {
         "Restore this contingency entry?"
       );
 
-    if (!confirmed) {
-      return;
-    }
+    if (!confirmed) return;
 
     try {
       setRestoring(true);
 
-      const {
-        error,
-      } = await supabase
-        .from(
-          "contingency_entries"
-        )
-        .update({
-          deleted_at:
-            null,
-
-          updated_at:
-            new Date().toISOString(),
-        })
-        .eq(
-          "id",
-          id
-        )
-        .eq(
-          "project_id",
-          selectedProject
-        )
-        .not(
-          "deleted_at",
-          "is",
-          null
-        );
+      const { error } =
+        await supabase
+          .from(
+            "contingency_entries"
+          )
+          .update({
+            deleted_at: null,
+            updated_at:
+              new Date().toISOString(),
+          })
+          .eq("id", id)
+          .eq(
+            "project_id",
+            selectedProject
+          )
+          .not(
+            "deleted_at",
+            "is",
+            null
+          );
 
       if (error) {
         console.error(
@@ -1015,10 +882,7 @@ export default function ContingencyPage() {
           error
         );
 
-        alert(
-          error.message
-        );
-
+        alert(error.message);
         return;
       }
 
@@ -1136,9 +1000,7 @@ export default function ContingencyPage() {
   // CURRENCY
   // =========================================================
 
-  function money(
-    value: number
-  ) {
+  function money(value: number) {
     return new Intl.NumberFormat(
       "en-US",
       {
@@ -1150,7 +1012,7 @@ export default function ContingencyPage() {
   }
 
   // =========================================================
-  // STATUS STYLE
+  // STATUS
   // =========================================================
 
   function statusClass(
@@ -1165,7 +1027,7 @@ export default function ContingencyPage() {
 
     if (
       currentStatus ===
-        "Closed"
+      "Closed"
     ) {
       return "bg-gray-100 text-gray-700";
     }
@@ -1187,11 +1049,9 @@ export default function ContingencyPage() {
   if (loading) {
     return (
       <main className="p-8">
-
         <div className="bg-white border rounded-xl p-8">
           Loading Contingency...
         </div>
-
       </main>
     );
   }
@@ -1203,7 +1063,6 @@ export default function ContingencyPage() {
   if (!canView) {
     return (
       <main className="p-8 bg-gray-50 min-h-screen">
-
         <div className="max-w-xl mx-auto bg-white border rounded-xl p-10 text-center shadow-sm">
 
           <div className="text-5xl mb-4">
@@ -1233,7 +1092,6 @@ export default function ContingencyPage() {
           </Link>
 
         </div>
-
       </main>
     );
   }
@@ -1245,7 +1103,6 @@ export default function ContingencyPage() {
   if (projects.length === 0) {
     return (
       <main className="p-8 bg-gray-50 min-h-screen">
-
         <div className="bg-white border rounded-xl p-10 text-center">
 
           <div className="text-5xl mb-4">
@@ -1262,14 +1119,9 @@ export default function ContingencyPage() {
           </p>
 
         </div>
-
       </main>
     );
   }
-
-  // =========================================================
-  // PROJECT NAME
-  // =========================================================
 
   const selectedProjectName =
     projects.find(
@@ -1285,10 +1137,6 @@ export default function ContingencyPage() {
 
   return (
     <main className="p-8 bg-gray-50 min-h-screen">
-
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
 
       <div className="flex justify-between items-start mb-6">
 
@@ -1313,8 +1161,6 @@ export default function ContingencyPage() {
 
         </div>
 
-        {/* PROJECT */}
-
         <div>
 
           <label className="block text-sm font-semibold text-gray-600 mb-2">
@@ -1322,9 +1168,7 @@ export default function ContingencyPage() {
           </label>
 
           <select
-            value={
-              selectedProject
-            }
+            value={selectedProject}
             onChange={(e) =>
               setSelectedProject(
                 e.target.value
@@ -1336,12 +1180,8 @@ export default function ContingencyPage() {
             {projects.map(
               (project) => (
                 <option
-                  key={
-                    project.id
-                  }
-                  value={
-                    project.id
-                  }
+                  key={project.id}
+                  value={project.id}
                 >
                   {project.name}
                 </option>
@@ -1354,13 +1194,7 @@ export default function ContingencyPage() {
 
       </div>
 
-      {/* =====================================================
-          TOP ACTION BUTTONS
-      ===================================================== */}
-
       <div className="flex gap-3 flex-wrap mb-8">
-
-        {/* VIEW */}
 
         {canView && (
           <button
@@ -1374,8 +1208,6 @@ export default function ContingencyPage() {
           </button>
         )}
 
-        {/* CREATE */}
-
         {canCreate && (
           <button
             type="button"
@@ -1387,8 +1219,6 @@ export default function ContingencyPage() {
             ＋ Create
           </button>
         )}
-
-        {/* EDIT */}
 
         {canEdit && (
           <button
@@ -1402,8 +1232,6 @@ export default function ContingencyPage() {
           </button>
         )}
 
-        {/* DELETE / RESTORE */}
-
         {canDelete && (
           <button
             type="button"
@@ -1415,8 +1243,6 @@ export default function ContingencyPage() {
             🗑️ Delete / Restore
           </button>
         )}
-
-        {/* MANAGE */}
 
         {canManage && (
           <button
@@ -1432,10 +1258,6 @@ export default function ContingencyPage() {
 
       </div>
 
-      {/* =====================================================
-          PROJECT
-      ===================================================== */}
-
       <div className="bg-white border rounded-xl p-5 mb-6">
 
         <p className="text-sm text-gray-500">
@@ -1447,10 +1269,6 @@ export default function ContingencyPage() {
         </h2>
 
       </div>
-
-      {/* =====================================================
-          REFRESH
-      ===================================================== */}
 
       <div className="flex justify-end mb-4">
 
@@ -1466,56 +1284,36 @@ export default function ContingencyPage() {
 
       </div>
 
-      {/* =====================================================
-          LOADING
-      ===================================================== */}
-
       {loadingEntries && (
         <div className="mb-4 text-sm text-blue-600">
           Loading contingency data...
         </div>
       )}
 
-      {/* =====================================================
-          KPI
-      ===================================================== */}
-
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-6">
 
         <div className="bg-white border rounded-xl p-5 shadow-sm">
-
           <p className="text-sm text-gray-500">
             Total Allocated
           </p>
-
           <p className="text-3xl font-bold mt-2">
-            {money(
-              allocated
-            )}
+            {money(allocated)}
           </p>
-
         </div>
 
         <div className="bg-white border rounded-xl p-5 shadow-sm">
-
           <p className="text-sm text-gray-500">
             Used
           </p>
-
           <p className="text-3xl font-bold mt-2 text-orange-600">
-            {money(
-              used
-            )}
+            {money(used)}
           </p>
-
         </div>
 
         <div className="bg-white border rounded-xl p-5 shadow-sm">
-
           <p className="text-sm text-gray-500">
             Remaining
           </p>
-
           <p
             className={`text-3xl font-bold mt-2 ${
               remaining < 0
@@ -1523,11 +1321,8 @@ export default function ContingencyPage() {
                 : "text-green-600"
             }`}
           >
-            {money(
-              remaining
-            )}
+            {money(remaining)}
           </p>
-
         </div>
 
         <div className="bg-white border rounded-xl p-5 shadow-sm">
@@ -1537,10 +1332,7 @@ export default function ContingencyPage() {
           </p>
 
           <p className="text-3xl font-bold mt-2">
-            {utilization.toFixed(
-              1
-            )}
-            %
+            {utilization.toFixed(1)}%
           </p>
 
           <div className="h-2 bg-gray-100 rounded-full mt-4">
@@ -1570,59 +1362,36 @@ export default function ContingencyPage() {
 
       </div>
 
-      {/* =====================================================
-          SECONDARY SUMMARY
-      ===================================================== */}
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
 
         <div className="bg-white border rounded-xl p-5">
-
           <p className="text-sm text-gray-500">
             Transfers
           </p>
-
           <p className="text-2xl font-bold mt-2">
-            {money(
-              transfers
-            )}
+            {money(transfers)}
           </p>
-
         </div>
 
         <div className="bg-white border rounded-xl p-5">
-
           <p className="text-sm text-gray-500">
             Adjustments
           </p>
-
           <p className="text-2xl font-bold mt-2">
-            {money(
-              adjustments
-            )}
+            {money(adjustments)}
           </p>
-
         </div>
 
         <div className="bg-white border rounded-xl p-5">
-
           <p className="text-sm text-gray-500">
             Active Entries
           </p>
-
           <p className="text-2xl font-bold mt-2">
-            {
-              entries.length
-            }
+            {entries.length}
           </p>
-
         </div>
 
       </div>
-
-      {/* =====================================================
-          TABLE
-      ===================================================== */}
 
       <div
         id="contingency-table"
@@ -1649,16 +1418,12 @@ export default function ContingencyPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowDeleted(
-                    true
-                  )
+                  setShowDeleted(true)
                 }
                 className="border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium"
               >
                 🗑️ Deleted (
-                {
-                  deletedEntries.length
-                }
+                {deletedEntries.length}
                 )
               </button>
             )}
@@ -1666,9 +1431,7 @@ export default function ContingencyPage() {
             {canCreate && (
               <button
                 type="button"
-                onClick={
-                  openAddForm
-                }
+                onClick={openAddForm}
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
               >
                 + Add Entry
@@ -1679,12 +1442,7 @@ export default function ContingencyPage() {
 
         </div>
 
-        {/* ===================================================
-            ACTIVE TABLE
-        =================================================== */}
-
-        {entries.length ===
-        0 ? (
+        {entries.length === 0 ? (
 
           <div className="p-12 text-center">
 
@@ -1705,9 +1463,7 @@ export default function ContingencyPage() {
             {canCreate && (
               <button
                 type="button"
-                onClick={
-                  openAddForm
-                }
+                onClick={openAddForm}
                 className="mt-5 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg"
               >
                 + Add Contingency
@@ -1758,64 +1514,43 @@ export default function ContingencyPage() {
 
                 {entries.map(
                   (entry) => (
-
                     <tr
-                      key={
-                        entry.id
-                      }
+                      key={entry.id}
                       className="border-b hover:bg-gray-50"
                     >
 
                       <td className="p-4">
-
                         <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
-                          {
-                            entry.entry_type
-                          }
+                          {entry.entry_type}
                         </span>
-
                       </td>
 
                       <td className="p-4">
-
-                        {
-                          entry.description ||
-                          "—"
-                        }
-
+                        {entry.description || "—"}
                       </td>
 
                       <td className="p-4 text-right font-semibold">
-
                         {money(
                           Number(
-                            entry.amount ||
-                              0
+                            entry.amount || 0
                           )
                         )}
-
                       </td>
 
                       <td className="p-4">
-
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-semibold ${statusClass(
                             entry.status
                           )}`}
                         >
-                          {
-                            entry.status
-                          }
+                          {entry.status}
                         </span>
-
                       </td>
 
                       <td className="p-4 text-gray-500">
-
                         {new Date(
                           entry.created_at
                         ).toLocaleDateString()}
-
                       </td>
 
                       <td className="p-4">
@@ -1844,9 +1579,7 @@ export default function ContingencyPage() {
                                   entry.id
                                 )
                               }
-                              disabled={
-                                deleting
-                              }
+                              disabled={deleting}
                               className="text-red-600 hover:text-red-800 font-medium disabled:text-gray-400"
                             >
                               {deleting
@@ -1867,7 +1600,6 @@ export default function ContingencyPage() {
                       </td>
 
                     </tr>
-
                   )
                 )}
 
@@ -1922,9 +1654,7 @@ export default function ContingencyPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowEditSelector(
-                    false
-                  )
+                  setShowEditSelector(false)
                 }
                 className="text-gray-500 hover:text-gray-800 text-3xl"
               >
@@ -1942,9 +1672,7 @@ export default function ContingencyPage() {
 
                     <button
                       type="button"
-                      key={
-                        entry.id
-                      }
+                      key={entry.id}
                       onClick={() =>
                         selectEntryForEdit(
                           entry
@@ -1958,16 +1686,12 @@ export default function ContingencyPage() {
                         <div>
 
                           <p className="font-bold text-blue-700">
-                            {
-                              entry.entry_type
-                            }
+                            {entry.entry_type}
                           </p>
 
                           <p className="font-semibold mt-1">
-                            {
-                              entry.description ||
-                              "No description"
-                            }
+                            {entry.description ||
+                              "No description"}
                           </p>
 
                         </div>
@@ -1979,9 +1703,7 @@ export default function ContingencyPage() {
                               entry.status
                             )}`}
                           >
-                            {
-                              entry.status
-                            }
+                            {entry.status}
                           </span>
 
                           <p className="font-bold mt-2">
@@ -2011,9 +1733,7 @@ export default function ContingencyPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowEditSelector(
-                    false
-                  )
+                  setShowEditSelector(false)
                 }
                 className="border px-5 py-2.5 rounded-lg"
               >
@@ -2079,8 +1799,7 @@ export default function ContingencyPage() {
 
             <div className="p-6 overflow-y-auto overscroll-contain">
 
-              {deletedEntries.length ===
-              0 ? (
+              {deletedEntries.length === 0 ? (
 
                 <div className="text-center p-12">
 
@@ -2144,40 +1863,30 @@ export default function ContingencyPage() {
                           (entry) => (
 
                             <tr
-                              key={
-                                entry.id
-                              }
+                              key={entry.id}
                               className="border-b hover:bg-gray-50"
                             >
 
                               <td className="p-4">
 
                                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
-                                  {
-                                    entry.entry_type
-                                  }
+                                  {entry.entry_type}
                                 </span>
 
                               </td>
 
                               <td className="p-4">
-
-                                {
-                                  entry.description ||
-                                  "—"
-                                }
-
+                                {entry.description ||
+                                  "—"}
                               </td>
 
                               <td className="p-4 text-right font-semibold">
-
                                 {money(
                                   Number(
                                     entry.amount ||
                                       0
                                   )
                                 )}
-
                               </td>
 
                               <td className="p-4">
@@ -2187,9 +1896,7 @@ export default function ContingencyPage() {
                                     entry.status
                                   )}`}
                                 >
-                                  {
-                                    entry.status
-                                  }
+                                  {entry.status}
                                 </span>
 
                               </td>
@@ -2247,9 +1954,7 @@ export default function ContingencyPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowDeleted(
-                    false
-                  )
+                  setShowDeleted(false)
                 }
                 className="border px-5 py-2.5 rounded-lg"
               >
@@ -2315,69 +2020,45 @@ export default function ContingencyPage() {
 
             <div className="p-6 overflow-y-auto overscroll-contain">
 
-              {/* SUMMARY */}
-
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
 
                 <div className="border rounded-xl p-5 bg-gray-50">
-
                   <p className="text-sm text-gray-500">
                     Active
                   </p>
-
                   <p className="text-3xl font-bold mt-1">
-                    {
-                      entries.length
-                    }
+                    {entries.length}
                   </p>
-
                 </div>
 
                 <div className="border rounded-xl p-5 bg-gray-50">
-
                   <p className="text-sm text-gray-500">
                     Deleted
                   </p>
-
                   <p className="text-3xl font-bold mt-1">
-                    {
-                      deletedEntries.length
-                    }
+                    {deletedEntries.length}
                   </p>
-
                 </div>
 
                 <div className="border rounded-xl p-5 bg-gray-50">
-
                   <p className="text-sm text-gray-500">
                     Allocated
                   </p>
-
                   <p className="text-2xl font-bold mt-1">
-                    {money(
-                      allocated
-                    )}
+                    {money(allocated)}
                   </p>
-
                 </div>
 
                 <div className="border rounded-xl p-5 bg-gray-50">
-
                   <p className="text-sm text-gray-500">
                     Remaining
                   </p>
-
                   <p className="text-2xl font-bold mt-1">
-                    {money(
-                      remaining
-                    )}
+                    {money(remaining)}
                   </p>
-
                 </div>
 
               </div>
-
-              {/* ACTIONS */}
 
               <div className="border rounded-xl p-5 mt-6">
 
@@ -2390,9 +2071,7 @@ export default function ContingencyPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setShowManage(
-                        false
-                      );
+                      setShowManage(false);
                       openAddForm();
                     }}
                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg"
@@ -2403,9 +2082,7 @@ export default function ContingencyPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setShowManage(
-                        false
-                      );
+                      setShowManage(false);
                       handleEditButton();
                     }}
                     className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2.5 rounded-lg"
@@ -2416,12 +2093,8 @@ export default function ContingencyPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setShowManage(
-                        false
-                      );
-                      setShowDeleted(
-                        true
-                      );
+                      setShowManage(false);
+                      setShowDeleted(true);
                     }}
                     className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg"
                   >
@@ -2430,9 +2103,7 @@ export default function ContingencyPage() {
 
                   <button
                     type="button"
-                    onClick={
-                      handleRefresh
-                    }
+                    onClick={handleRefresh}
                     className="border border-gray-300 hover:bg-gray-50 px-4 py-2.5 rounded-lg"
                   >
                     ↻ Refresh Data
@@ -2441,8 +2112,6 @@ export default function ContingencyPage() {
                 </div>
 
               </div>
-
-              {/* PERMISSIONS */}
 
               <div className="border rounded-xl p-5 mt-6">
 
@@ -2453,42 +2122,21 @@ export default function ContingencyPage() {
                 <div className="space-y-2">
 
                   {[
-                    [
-                      "View",
-                      canView,
-                    ],
-                    [
-                      "Create",
-                      canCreate,
-                    ],
-                    [
-                      "Edit",
-                      canEdit,
-                    ],
-                    [
-                      "Delete / Restore",
-                      canDelete,
-                    ],
-                    [
-                      "Manage",
-                      canManage,
-                    ],
+                    ["View", canView],
+                    ["Create", canCreate],
+                    ["Edit", canEdit],
+                    ["Delete / Restore", canDelete],
+                    ["Manage", canManage],
                   ].map(
                     ([name, allowed]) => (
 
                       <div
-                        key={
-                          String(name)
-                        }
+                        key={String(name)}
                         className="flex justify-between border rounded-lg px-4 py-3"
                       >
 
                         <span>
-                          {
-                            String(
-                              name
-                            )
-                          }
+                          {String(name)}
                         </span>
 
                         <span
@@ -2519,9 +2167,7 @@ export default function ContingencyPage() {
               <button
                 type="button"
                 onClick={() =>
-                  setShowManage(
-                    false
-                  )
+                  setShowManage(false)
                 }
                 className="border px-5 py-2.5 rounded-lg"
               >
@@ -2563,8 +2209,6 @@ export default function ContingencyPage() {
             }
           >
 
-            {/* HEADER */}
-
             <div className="p-6 border-b flex justify-between items-center shrink-0">
 
               <div>
@@ -2576,20 +2220,17 @@ export default function ContingencyPage() {
                 </h2>
 
                 <p className="text-sm text-gray-500 mt-1">
-                  {
-                    selectedProjectName
-                  }
+                  {selectedProjectName}
                 </p>
 
               </div>
 
               <button
                 type="button"
-                onClick={() =>
-                  setShowForm(
-                    false
-                  )
-                }
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingId(null);
+                }}
                 className="text-gray-500 hover:text-gray-900 text-3xl w-10 h-10 rounded-lg hover:bg-gray-100"
               >
                 ×
@@ -2597,11 +2238,7 @@ export default function ContingencyPage() {
 
             </div>
 
-            {/* FORM BODY */}
-
             <div className="p-6 space-y-5 overflow-y-auto overscroll-contain">
-
-              {/* ENTRY TYPE */}
 
               <div>
 
@@ -2610,9 +2247,7 @@ export default function ContingencyPage() {
                 </label>
 
                 <select
-                  value={
-                    entryType
-                  }
+                  value={entryType}
                   onChange={(e) =>
                     setEntryType(
                       e.target.value
@@ -2641,8 +2276,6 @@ export default function ContingencyPage() {
 
               </div>
 
-              {/* AMOUNT */}
-
               <div>
 
                 <label className="block text-sm font-medium mb-2">
@@ -2659,9 +2292,7 @@ export default function ContingencyPage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={
-                      amount
-                    }
+                    value={amount}
                     onChange={(e) =>
                       setAmount(
                         e.target.value
@@ -2675,8 +2306,6 @@ export default function ContingencyPage() {
 
               </div>
 
-              {/* DESCRIPTION */}
-
               <div>
 
                 <label className="block text-sm font-medium mb-2">
@@ -2684,9 +2313,7 @@ export default function ContingencyPage() {
                 </label>
 
                 <textarea
-                  value={
-                    description
-                  }
+                  value={description}
                   onChange={(e) =>
                     setDescription(
                       e.target.value
@@ -2699,8 +2326,6 @@ export default function ContingencyPage() {
 
               </div>
 
-              {/* STATUS */}
-
               <div>
 
                 <label className="block text-sm font-medium mb-2">
@@ -2708,9 +2333,7 @@ export default function ContingencyPage() {
                 </label>
 
                 <select
-                  value={
-                    status
-                  }
+                  value={status}
                   onChange={(e) =>
                     setStatus(
                       e.target.value
@@ -2741,20 +2364,13 @@ export default function ContingencyPage() {
 
             </div>
 
-            {/* FOOTER */}
-
             <div className="p-6 border-t flex justify-end gap-3 shrink-0">
 
               <button
                 type="button"
                 onClick={() => {
-                  setShowForm(
-                    false
-                  );
-
-                  setEditingId(
-                    null
-                  );
+                  setShowForm(false);
+                  setEditingId(null);
                 }}
                 className="border border-gray-300 hover:bg-gray-50 px-5 py-2.5 rounded-lg"
               >
@@ -2763,12 +2379,8 @@ export default function ContingencyPage() {
 
               <button
                 type="button"
-                onClick={
-                  handleSave
-                }
-                disabled={
-                  saving
-                }
+                onClick={handleSave}
+                disabled={saving}
                 className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-5 py-2.5 rounded-lg font-semibold"
               >
                 {saving
@@ -2786,5 +2398,25 @@ export default function ContingencyPage() {
       )}
 
     </main>
+  );
+}
+
+// =========================================================
+// SUSPENSE WRAPPER
+// =========================================================
+
+export default function ContingencyPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="p-8 bg-gray-50 min-h-screen">
+          <div className="bg-white border rounded-xl p-8">
+            Loading Contingency...
+          </div>
+        </main>
+      }
+    >
+      <ContingencyContent />
+    </Suspense>
   );
 }
