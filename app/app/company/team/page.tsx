@@ -15,8 +15,8 @@ type Member = {
   role_id: string | null;
   company_id: string | null;
   created_at: string;
+  is_owner: boolean;
 };
-
 export default function CompanyTeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -60,13 +60,15 @@ export default function CompanyTeamPage() {
       // =====================================================
 
       const {
-        data: profile,
-        error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .single();
+  data: profile,
+  error: profileError,
+} = await supabase
+  .from("profiles")
+  .select(
+  "id, full_name, role_id, company_id, created_at, is_owner"
+)
+  .eq("id", user.id)
+  .single();
 
       console.log("PROFILE:", profile);
       console.log("PROFILE ERROR:", profileError);
@@ -86,6 +88,37 @@ export default function CompanyTeamPage() {
       }
 
       setCompanyId(profile.company_id);
+      // =====================================================
+// 2B. Check current user's owner/admin status
+// =====================================================
+
+const isOwner = profile.is_owner === true;
+
+let isAdmin = false;
+
+if (profile.role_id) {
+  const { data: currentRole } = await supabase
+    .from("roles")
+    .select("name")
+    .eq("id", profile.role_id)
+    .single();
+
+  isAdmin = currentRole?.name === "Admin";
+}
+
+console.log("====================================");
+console.log("TEAM ACCESS CHECK");
+console.log("IS OWNER:", isOwner);
+console.log("IS ADMIN:", isAdmin);
+console.log("ROLE ID:", profile.role_id);
+console.log("====================================");
+
+// Only Owner or Admin can access this page
+if (!isOwner && !isAdmin) {
+  window.location.href = "/app/projects";
+  return;
+}
+
 
       console.log("====================================");
       console.log("TEAM SECURITY CHECK");
@@ -129,8 +162,8 @@ export default function CompanyTeamPage() {
       } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, role_id, company_id, created_at"
-        )
+  "id, full_name, role_id, company_id, created_at, is_owner"
+)
         .eq("company_id", profile.company_id)
         .order("created_at", {
           ascending: true,
@@ -180,57 +213,53 @@ export default function CompanyTeamPage() {
   // =====================================================
 
   async function updateRole(
-    profileId: string,
-    roleId: string
-  ) {
-    if (!roleId || !companyId) {
+  profileId: string,
+  roleId: string
+) {
+  if (!roleId || !companyId) {
+    return;
+  }
+
+  setUpdatingRole(profileId);
+
+  try {
+    console.log("====================================");
+    console.log("UPDATING ROLE");
+    console.log("PROFILE ID:", profileId);
+    console.log("NEW ROLE ID:", roleId);
+    console.log("COMPANY ID:", companyId);
+    console.log("====================================");
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        role_id: roleId,
+      })
+      .eq("id", profileId)
+      .eq("company_id", companyId);
+
+    console.log("UPDATE ERROR:", error);
+
+    if (error) {
+      console.error("ROLE UPDATE ERROR:", error);
+      alert(`Role update failed: ${error.message}`);
       return;
     }
 
-    setUpdatingRole(profileId);
+    // Reload directly from database
+    await loadPage();
 
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+    console.log("ROLE UPDATE COMPLETE");
+  } catch (err: any) {
+    console.error("ROLE UPDATE EXCEPTION:", err);
 
-      if (!user) {
-        alert("Please log in again.");
-        return;
-      }
-
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          role_id: roleId,
-        })
-        .eq("id", profileId)
-        .eq("company_id", companyId);
-
-      if (error) {
-        console.error(
-          "ROLE UPDATE ERROR:",
-          error
-        );
-
-        alert(error.message);
-        return;
-      }
-
-      setMembers((currentMembers) =>
-        currentMembers.map((member) =>
-          member.id === profileId
-            ? {
-                ...member,
-                role_id: roleId,
-              }
-            : member
-        )
-      );
-    } finally {
-      setUpdatingRole(null);
-    }
+    alert(
+      err?.message || "Unable to update the role."
+    );
+  } finally {
+    setUpdatingRole(null);
   }
+}
 
   function getRoleName(roleId: string | null) {
     if (!roleId) {
@@ -486,54 +515,65 @@ export default function CompanyTeamPage() {
 
                       {/* ROLE */}
 
-                      <td className="px-6 py-5">
+<td className="px-6 py-5">
 
-                        <div className="flex items-center gap-3">
+  {member.is_owner ? (
 
-                          <select
-                            value={member.role_id ?? ""}
-                            disabled={
-                              updatingRole === member.id ||
-                              rolesLoading
-                            }
-                            onChange={(e) =>
-                              updateRole(
-                                member.id,
-                                e.target.value
-                              )
-                            }
-                            className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm min-w-[180px] focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
-                          >
+    <div>
+      <span className="inline-flex items-center px-3 py-2 rounded-lg bg-purple-100 text-purple-800 font-semibold text-sm">
+        👑 Owner
+      </span>
 
-                            <option value="">
-                              No Role Assigned
-                            </option>
+      <p className="text-xs text-gray-400 mt-1">
+        Permanent company owner
+      </p>
+    </div>
 
-                            {roles.map((role) => (
-                              <option
-                                key={role.id}
-                                value={role.id}
-                              >
-                                {role.name}
-                              </option>
-                            ))}
+  ) : (
 
-                          </select>
+    <div className="flex items-center gap-3">
 
-                          {updatingRole === member.id && (
-                            <span className="text-xs text-gray-500">
-                              Saving...
-                            </span>
-                          )}
+      <select
+        value={member.role_id ?? ""}
+        disabled={
+          updatingRole === member.id ||
+          rolesLoading
+        }
+        onChange={(e) =>
+          updateRole(
+            member.id,
+            e.target.value
+          )
+        }
+        className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm min-w-[180px] focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
+      >
 
-                        </div>
+        <option value="">
+          No Role Assigned
+        </option>
 
-                        <p className="text-xs text-gray-400 mt-1">
-                          {getRoleName(member.role_id)}
-                        </p>
+        {roles.map((role) => (
+          <option
+            key={role.id}
+            value={role.id}
+          >
+            {role.name}
+          </option>
+        ))}
 
-                      </td>
+      </select>
 
+      {updatingRole === member.id && (
+        <span className="text-xs text-gray-500">
+          Saving...
+        </span>
+      )}
+
+    </div>
+
+  )}
+
+</td>
                       {/* STATUS */}
 
                       <td className="px-6 py-5">

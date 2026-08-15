@@ -4,9 +4,9 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 export async function POST(request: Request) {
   try {
-    // ============================================
+    // ============================================================
     // 1. Get logged-in user
-    // ============================================
+    // ============================================================
 
     const supabase = await createClient();
 
@@ -25,15 +25,16 @@ export async function POST(request: Request) {
     if (userError || !user) {
       return NextResponse.json(
         {
-          error: "You must be logged in to accept this invitation.",
+          error:
+            "You must be logged in to accept this invitation.",
         },
         { status: 401 }
       );
     }
 
-    // ============================================
+    // ============================================================
     // 2. Get invitation ID
-    // ============================================
+    // ============================================================
 
     const body = await request.json();
 
@@ -50,18 +51,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // ============================================
-    // 3. Find exact invitation
-    // ============================================
+    // ============================================================
+    // 3. Find invitation
+    // ============================================================
 
-    const { data: invitation, error: invitationError } =
-      await supabaseAdmin
-        .from("invitations")
-        .select(
-          "id, email, full_name, company_id, role_id, status"
-        )
-        .eq("id", invitationId)
-        .maybeSingle();
+    const {
+      data: invitation,
+      error: invitationError,
+    } = await supabaseAdmin
+      .from("invitations")
+      .select(
+        "id, email, full_name, company_id, role_id, status"
+      )
+      .eq("id", invitationId)
+      .maybeSingle();
 
     console.log("INVITATION:", invitation);
     console.log("INVITATION ERROR:", invitationError);
@@ -84,22 +87,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // ============================================
-    // 4. Make sure invitation is still pending
-    // ============================================
+    // ============================================================
+    // 4. Check invitation status
+    // ============================================================
 
     if (invitation.status !== "Pending") {
       return NextResponse.json(
         {
-          error: `This invitation has already been ${invitation.status.toLowerCase()}.`,
+          error:
+            `This invitation has already been ` +
+            `${String(invitation.status).toLowerCase()}.`,
         },
         { status: 400 }
       );
     }
 
-    // ============================================
-    // 5. Verify email
-    // ============================================
+    // ============================================================
+    // 5. Verify invited email
+    // ============================================================
 
     const invitedEmail =
       invitation.email?.trim().toLowerCase();
@@ -110,123 +115,302 @@ export async function POST(request: Request) {
     console.log("INVITED EMAIL:", invitedEmail);
     console.log("CURRENT USER EMAIL:", currentEmail);
 
-    if (!currentEmail || currentEmail !== invitedEmail) {
+    if (!currentEmail) {
+      return NextResponse.json(
+        {
+          error:
+            "Your account does not have an email address.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (currentEmail !== invitedEmail) {
       return NextResponse.json(
         {
           error:
             `This invitation was sent to ${invitedEmail}, ` +
-            `but you are logged in as ${currentEmail || "unknown"}. ` +
+            `but you are logged in as ${currentEmail}. ` +
             `Please log in using the invited email address.`,
         },
         { status: 403 }
       );
     }
 
-    // ============================================
-    // 6. Check if profile already exists
-    // ============================================
+    // ============================================================
+    // 6. Make sure invitation has company and role
+    // ============================================================
 
-    const { data: existingProfile } =
-      await supabaseAdmin
-        .from("profiles")
-        .select("id, company_id")
-        .eq("id", user.id)
-        .maybeSingle();
+    if (!invitation.company_id) {
+      return NextResponse.json(
+        {
+          error:
+            "This invitation is not connected to a company.",
+        },
+        { status: 400 }
+      );
+    }
 
+    if (!invitation.role_id) {
+      return NextResponse.json(
+        {
+          error:
+            "This invitation does not have a role assigned.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // ============================================================
+    // 7. Check existing profile
+    // ============================================================
+
+    const {
+      data: existingProfile,
+      error: existingProfileError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .select(
+        "id, email, full_name, company_id, role_id, is_owner"
+      )
+      .eq("id", user.id)
+      .maybeSingle();
+
+    console.log("EXISTING PROFILE:", existingProfile);
     console.log(
-      "EXISTING PROFILE:",
-      existingProfile
+      "EXISTING PROFILE ERROR:",
+      existingProfileError
     );
 
-    // ============================================
-    // 7. Create/update profile
-    // ============================================
+    if (existingProfileError) {
+      return NextResponse.json(
+        {
+          error:
+            `Unable to check your profile: ` +
+            existingProfileError.message,
+        },
+        { status: 400 }
+      );
+    }
 
-    const { error: profileError } =
-      await supabaseAdmin
+    // ============================================================
+    // 8. Assign user to company
+    // ============================================================
+
+    if (existingProfile) {
+      // ----------------------------------------------------------
+      // Existing profile
+      // ----------------------------------------------------------
+
+      const {
+        error: updateProfileError,
+      } = await supabaseAdmin
         .from("profiles")
-        .upsert(
-          {
-            id: user.id,
-            email: currentEmail,
-            full_name: invitation.full_name,
-            company_id: invitation.company_id,
-            role_id: invitation.role_id,
-            is_owner: false,
-          },
-          {
-            onConflict: "id",
-          }
+        .update({
+          email: currentEmail,
+          full_name:
+            invitation.full_name ||
+            existingProfile.full_name ||
+            null,
+          company_id: invitation.company_id,
+          role_id: invitation.role_id,
+          is_owner: false,
+        })
+        .eq("id", user.id);
+
+      if (updateProfileError) {
+        console.error(
+          "PROFILE UPDATE ERROR:",
+          updateProfileError
         );
 
-    if (profileError) {
+        return NextResponse.json(
+          {
+            error:
+              `Unable to assign your account to the company: ` +
+              updateProfileError.message,
+          },
+          { status: 400 }
+        );
+      }
+
+      console.log(
+        "EXISTING PROFILE UPDATED SUCCESSFULLY"
+      );
+    } else {
+      // ----------------------------------------------------------
+      // No profile exists
+      // ----------------------------------------------------------
+
+      const {
+        error: insertProfileError,
+      } = await supabaseAdmin
+        .from("profiles")
+        .insert({
+          id: user.id,
+          email: currentEmail,
+          full_name: invitation.full_name,
+          company_id: invitation.company_id,
+          role_id: invitation.role_id,
+          is_owner: false,
+        });
+
+      if (insertProfileError) {
+        console.error(
+          "PROFILE INSERT ERROR:",
+          insertProfileError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              `Unable to create your company profile: ` +
+              insertProfileError.message,
+          },
+          { status: 400 }
+        );
+      }
+
+      console.log(
+        "NEW PROFILE CREATED SUCCESSFULLY"
+      );
+    }
+
+    // ============================================================
+    // 9. Verify profile was actually assigned
+    // ============================================================
+
+    const {
+      data: verifiedProfile,
+      error: verifyProfileError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .select(
+        "id, email, full_name, company_id, role_id, is_owner"
+      )
+      .eq("id", user.id)
+      .single();
+
+    console.log(
+      "VERIFIED PROFILE:",
+      verifiedProfile
+    );
+
+    if (verifyProfileError || !verifiedProfile) {
       console.error(
-        "PROFILE UPSERT ERROR:",
-        profileError
+        "PROFILE VERIFICATION ERROR:",
+        verifyProfileError
       );
 
       return NextResponse.json(
         {
-          error: profileError.message,
+          error:
+            "The profile could not be verified after accepting the invitation.",
         },
-        { status: 400 }
+        { status: 500 }
       );
     }
 
-    // ============================================
-    // 8. Mark invitation accepted
-    // ============================================
+    if (
+      verifiedProfile.company_id !==
+      invitation.company_id
+    ) {
+      console.error(
+        "COMPANY ASSIGNMENT FAILED",
+        {
+          expected: invitation.company_id,
+          actual: verifiedProfile.company_id,
+        }
+      );
 
-    const { error: updateError } =
-      await supabaseAdmin
-        .from("invitations")
-        .update({
-          status: "Accepted",
-        })
-        .eq("id", invitation.id);
+      return NextResponse.json(
+        {
+          error:
+            "Your account was not successfully connected to the company.",
+        },
+        { status: 500 }
+      );
+    }
 
-    if (updateError) {
+    // ============================================================
+    // 10. Mark invitation as accepted
+    // ============================================================
+
+    const {
+      error: invitationUpdateError,
+    } = await supabaseAdmin
+      .from("invitations")
+      .update({
+        status: "Accepted",
+      })
+      .eq("id", invitation.id)
+      .eq("status", "Pending");
+
+    if (invitationUpdateError) {
       console.error(
         "INVITATION UPDATE ERROR:",
-        updateError
+        invitationUpdateError
       );
 
       return NextResponse.json(
         {
-          error: updateError.message,
+          error:
+            invitationUpdateError.message,
         },
         { status: 400 }
       );
     }
 
-    // ============================================
-    // 9. Success
-    // ============================================
+    // ============================================================
+    // 11. Success
+    // ============================================================
 
     console.log("====================================");
-    console.log("INVITATION ACCEPTED SUCCESSFULLY");
+    console.log(
+      "INVITATION ACCEPTED SUCCESSFULLY"
+    );
     console.log("USER:", user.id);
     console.log("EMAIL:", currentEmail);
-    console.log("COMPANY:", invitation.company_id);
-    console.log("ROLE:", invitation.role_id);
+    console.log(
+      "COMPANY:",
+      verifiedProfile.company_id
+    );
+    console.log(
+      "ROLE:",
+      verifiedProfile.role_id
+    );
+    console.log("INVITATION:", invitation.id);
     console.log("====================================");
 
     return NextResponse.json({
       success: true,
-      message: "Invitation accepted successfully.",
-      company_id: invitation.company_id,
-      role_id: invitation.role_id,
+      message:
+        "Invitation accepted successfully.",
+      company_id: verifiedProfile.company_id,
+      role_id: verifiedProfile.role_id,
+      user_id: verifiedProfile.id,
     });
-
-  } catch (error) {
+  } catch (error: any) {
     console.error(
-      "ACCEPT INVITATION API ERROR:",
-      error
+      "===================================="
+    );
+    console.error(
+      "ACCEPT INVITATION API ERROR"
+    );
+    console.error("ERROR:", error);
+    console.error(
+      "MESSAGE:",
+      error?.message
+    );
+    console.error(
+      "===================================="
     );
 
     return NextResponse.json(
       {
-        error: "Failed to accept invitation.",
+        error:
+          error?.message ||
+          "Failed to accept invitation.",
       },
       { status: 500 }
     );

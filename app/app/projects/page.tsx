@@ -11,25 +11,29 @@ export default async function ProjectsPage() {
   console.log("PROJECTS PAGE");
   console.log("====================================");
 
-  // 1. Get logged-in user
+  // ============================================
+  // 1. GET LOGGED-IN USER
+  // ============================================
+
   const {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
 
-  console.log("====================================");
   console.log("AUTH CHECK");
   console.log("USER ID:", user?.id);
   console.log("USER EMAIL:", user?.email);
   console.log("USER ERROR:", userError);
-  console.log("====================================");
 
-  // User is not logged in
+  // ============================================
+  // USER NOT LOGGED IN
+  // ============================================
+
   if (userError || !user) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-          <h1 className="text-2xl font-bold text-red-600">
+      <main className="p-8">
+        <div className="max-w-xl mx-auto text-center mt-20">
+          <h1 className="text-3xl font-bold">
             Authentication Required
           </h1>
 
@@ -48,48 +52,62 @@ export default async function ProjectsPage() {
     );
   }
 
-  // 2. Get user's company
+  // ============================================
+  // 2. GET USER PROFILE
+  // ============================================
+
   const {
-    data: profile,
-    error: profileError,
-  } = await supabase
-    .from("profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .single();
+  data: profile,
+  error: profileError,
+} = await supabase
+  .from("profiles")
+  .select(`
+    company_id,
+    role_id,
+    is_owner
+  `)
+  .eq("id", user.id)
+  .single();
 
   console.log("====================================");
-  console.log("COMPANY CHECK");
-  console.log("USER ID:", user.id);
-  console.log("USER EMAIL:", user.email);
+  console.log("PROFILE CHECK");
   console.log("PROFILE:", profile);
   console.log("PROFILE ERROR:", profileError);
-  console.log("CURRENT COMPANY ID:", profile?.company_id);
   console.log("====================================");
 
-  // Profile error
+  // ============================================
+  // PROFILE ERROR
+  // ============================================
+
   if (profileError) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-          <h1 className="text-2xl font-bold text-red-600">
+      <main className="p-8">
+        <div className="max-w-xl mx-auto text-center mt-20">
+          <h1 className="text-3xl font-bold">
             Profile Error
           </h1>
 
-          <pre className="mt-4 bg-white p-4 rounded-lg overflow-auto">
-            {JSON.stringify(profileError, null, 2)}
+          <pre className="mt-4 bg-white p-4 rounded-lg overflow-auto text-left">
+            {JSON.stringify(
+              profileError,
+              null,
+              2
+            )}
           </pre>
         </div>
       </main>
     );
   }
 
-  // 3. User has no company
+  // ============================================
+  // 3. CHECK COMPANY
+  // ============================================
+
   if (!profile?.company_id) {
     return (
-      <main className="min-h-screen p-8">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
-          <h1 className="text-2xl font-bold text-yellow-700">
+      <main className="p-8">
+        <div className="max-w-xl mx-auto text-center mt-20">
+          <h1 className="text-3xl font-bold">
             No Company Assigned
           </h1>
 
@@ -108,59 +126,285 @@ export default async function ProjectsPage() {
     );
   }
 
-  console.log("====================================");
-  console.log("LOADING COMPANY PROJECTS");
-  console.log("COMPANY ID:", profile.company_id);
-  console.log("====================================");
+  const companyId = profile.company_id;
 
-  // 4. Load ONLY this company's active projects
+  // ============================================
+  // 4. DETERMINE USER ROLE
+  // ============================================
+
+  // ============================================
+// 4. DETERMINE USER ROLE
+// ============================================
+
+let roleName = "";
+
+if (profile.role_id) {
   const {
-    data: projects,
-    error: projectError,
+    data: role,
+    error: roleError,
   } = await supabase
-    .from("projects")
-    .select("*")
-    .eq("company_id", profile.company_id)
-    .eq("archived", false)
-    .order("created_at", { ascending: false });
+    .from("roles")
+    .select("name")
+    .eq("id", profile.role_id)
+    .maybeSingle();
+
+  console.log("ROLE:", role);
+  console.log("ROLE ERROR:", roleError);
+
+  roleName = role?.name || "";
+}
+
+const isOwner = profile.is_owner === true;
+
+const isAdmin = roleName === "Admin";
+
+const hasFullProjectAccess =
+  isAdmin || isOwner;
+
+console.log("====================================");
+console.log("ACCESS CHECK");
+console.log("ROLE:", roleName);
+console.log("ROLE ID:", profile.role_id);
+console.log("IS OWNER:", isOwner);
+console.log("IS ADMIN:", isAdmin);
+console.log(
+  "FULL PROJECT ACCESS:",
+  hasFullProjectAccess
+);
+console.log("COMPANY:", companyId);
+console.log("====================================");
 
   console.log("====================================");
-  console.log("PROJECT RESULTS");
-  console.log("PROJECTS:", projects);
-  console.log("PROJECT COUNT:", projects?.length);
-  console.log("PROJECT ERROR:", projectError);
+  console.log("ACCESS CHECK");
+  console.log("ROLE:", roleName);
+  console.log("IS OWNER:", isOwner);
+  console.log("IS ADMIN:", isAdmin);
+  console.log("COMPANY:", companyId);
+  console.log("====================================");
 
+  // ============================================
+  // 5. LOAD PROJECTS
+  // ============================================
+
+  let projects: any[] = [];
+
+  // ============================================
+  // ADMIN / OWNER
+  // ============================================
+  //
+  // Admins and company owners can see
+  // every project belonging to the company.
+  //
+  // ============================================
+
+  if (hasFullProjectAccess) {
+    console.log(
+      "ADMIN /Owner ACCESS: Loading all company projects"
+    );
+
+    const {
+      data,
+      error: projectError,
+    } = await supabase
+      .from("projects")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("archived", false)
+      .order("created_at", {
+        ascending: false,
+      });
+
+    console.log("ADMIN PROJECTS:", data);
+    console.log(
+      "ADMIN PROJECT ERROR:",
+      projectError
+    );
+
+    if (projectError) {
+      return (
+        <main className="p-8">
+          <div className="max-w-xl mx-auto text-center mt-20">
+            <h1 className="text-3xl font-bold">
+              Error Loading Projects
+            </h1>
+
+            <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left">
+              {JSON.stringify(
+                projectError,
+                null,
+                2
+              )}
+            </pre>
+          </div>
+        </main>
+      );
+    }
+
+    projects = data || [];
+  }
+
+  // ============================================
+  // NORMAL EMPLOYEE
+  // ============================================
+  //
+  // Employees can ONLY see projects assigned
+  // to them through project_members.
+  //
+  // ============================================
+
+  else {
+    console.log(
+      "EMPLOYEE ACCESS: Loading assigned projects only"
+    );
+
+    // --------------------------------------------
+    // Get project assignments
+    // --------------------------------------------
+
+    const {
+      data: assignments,
+      error: assignmentError,
+    } = await supabase
+      .from("project_members")
+      .select("project_id")
+      .eq("profile_id", user.id);
+
+    console.log(
+      "PROJECT ASSIGNMENTS:",
+      assignments
+    );
+
+    console.log(
+      "ASSIGNMENT ERROR:",
+      assignmentError
+    );
+
+    if (assignmentError) {
+      return (
+        <main className="p-8">
+          <div className="max-w-xl mx-auto text-center mt-20">
+            <h1 className="text-3xl font-bold">
+              Error Loading Project Access
+            </h1>
+
+            <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left">
+              {JSON.stringify(
+                assignmentError,
+                null,
+                2
+              )}
+            </pre>
+          </div>
+        </main>
+      );
+    }
+
+    // --------------------------------------------
+    // Get project IDs
+    // --------------------------------------------
+
+    const projectIds =
+      assignments?.map(
+        (assignment) =>
+          assignment.project_id
+      ) || [];
+
+    console.log(
+      "ASSIGNED PROJECT IDS:",
+      projectIds
+    );
+
+    // --------------------------------------------
+    // No projects assigned
+    // --------------------------------------------
+
+    if (projectIds.length === 0) {
+      projects = [];
+    }
+
+    // --------------------------------------------
+    // Load ONLY assigned projects
+    // --------------------------------------------
+
+    else {
+      const {
+        data,
+        error: projectError,
+      } = await supabase
+        .from("projects")
+        .select("*")
+        .eq("company_id", companyId)
+        .eq("archived", false)
+        .in("id", projectIds)
+        .order("created_at", {
+          ascending: false,
+        });
+
+      console.log(
+        "EMPLOYEE PROJECTS:",
+        data
+      );
+
+      console.log(
+        "EMPLOYEE PROJECT ERROR:",
+        projectError
+      );
+
+      if (projectError) {
+        return (
+          <main className="p-8">
+            <div className="max-w-xl mx-auto text-center mt-20">
+              <h1 className="text-3xl font-bold">
+                Error Loading Projects
+              </h1>
+
+              <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left">
+                {JSON.stringify(
+                  projectError,
+                  null,
+                  2
+                )}
+              </pre>
+            </div>
+          </main>
+        );
+      }
+
+      projects = data || [];
+    }
+  }
+
+  // ============================================
+  // FINAL LOG
+  // ============================================
+
+  console.log("====================================");
+  console.log("FINAL PROJECT LIST");
+  console.log("USER:", user.email);
+  console.log("ROLE:", roleName);
+  console.log("IS ADMIN:", isAdmin);
+  console.log("PROJECT COUNT:", projects.length);
   console.log(
-    "PROJECT COMPANY IDS:",
-    projects?.map((project) => ({
+    "PROJECTS:",
+    projects.map((project) => ({
+      id: project.id,
       name: project.name,
       company_id: project.company_id,
     }))
   );
-
   console.log("====================================");
 
-  // Project loading error
-  if (projectError) {
-    return (
-      <main className="min-h-screen p-8">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-          <h1 className="text-2xl font-bold text-red-600">
-            Error Loading Projects
-          </h1>
-
-          <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto">
-            {JSON.stringify(projectError, null, 2)}
-          </pre>
-        </div>
-      </main>
-    );
-  }
+  // ============================================
+  // PAGE
+  // ============================================
 
   return (
-    <main className="min-h-screen p-8">
+    <main className="p-8">
 
-      {/* Header */}
+      {/* ======================================== */}
+      {/* HEADER */}
+      {/* ======================================== */}
+
       <div className="flex justify-between items-center mb-8">
 
         <div>
@@ -169,13 +413,19 @@ export default async function ProjectsPage() {
           </h1>
 
           <p className="text-gray-500 mt-1">
-            Projects for your company
+            {isAdmin
+              ? "All projects for your company"
+              : "Projects assigned to you"}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
 
-          <NewProjectDialog />
+          {/* Only Admin / Owner can create projects */}
+
+          {isAdmin && (
+            <NewProjectDialog />
+          )}
 
           <Link
             href="/app/dashboard"
@@ -188,10 +438,39 @@ export default async function ProjectsPage() {
 
       </div>
 
-      {/* Projects */}
-      <ProjectsClient
-        initialProjects={projects ?? []}
-      />
+      {/* ======================================== */}
+      {/* EMPLOYEE INFORMATION */}
+      {/* ======================================== */}
+
+      {!isAdmin && projects.length === 0 && (
+        <div className="bg-white rounded-xl shadow p-10 text-center">
+
+          <div className="text-5xl mb-4">
+            📁
+          </div>
+
+          <h2 className="text-2xl font-bold text-gray-900">
+            No Projects Assigned
+          </h2>
+
+          <p className="text-gray-500 mt-2">
+            You currently don't have access to any
+            projects. Please contact your company
+            administrator.
+          </p>
+
+        </div>
+      )}
+
+      {/* ======================================== */}
+      {/* PROJECTS */}
+      {/* ======================================== */}
+
+      {projects.length > 0 && (
+        <ProjectsClient
+          initialProjects={projects}
+        />
+      )}
 
     </main>
   );

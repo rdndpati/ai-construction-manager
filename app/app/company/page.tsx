@@ -1,11 +1,57 @@
-"use client";
-
+import { redirect } from "next/navigation";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 
-export default function CompanyPage() {
+export default async function CompanyPage() {
+  const supabase = await createClient();
+
+  // Get logged-in user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  // Get user's profile and role
+  const { data: profile, error } = await supabase
+    .from("profiles")
+    .select(`
+      id,
+      company_id,
+      is_owner,
+      roles (
+        name
+      )
+    `)
+    .eq("id", user.id)
+    .single();
+
+  if (error || !profile) {
+    redirect("/app/projects");
+  }
+
+  // Handle Supabase relationship returning object or array
+  const roleData = profile.roles as unknown as
+  | { name: string }
+  | { name: string }[]
+  | null;
+
+const roleName = Array.isArray(roleData)
+  ? roleData[0]?.name
+  : roleData?.name;
+
+  const isOwner = profile.is_owner === true;
+  const isAdmin = roleName === "Admin";
+
+  // Only Owner or Admin can access Company Administration
+  if (!isOwner && !isAdmin) {
+    redirect("/app/projects");
+  }
+
   return (
-    <main className="p-8 bg-gray-100 min-h-screen">
-
+    <main>
       <div className="mb-8">
         <h1 className="text-4xl font-bold">
           Company Administration
@@ -18,6 +64,7 @@ export default function CompanyPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
 
+        {/* Company Profile */}
         <Link
           href="/app/company/profile"
           className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition"
@@ -33,6 +80,7 @@ export default function CompanyPage() {
           </p>
         </Link>
 
+        {/* Team Members */}
         <Link
           href="/app/company/team"
           className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition"
@@ -48,6 +96,7 @@ export default function CompanyPage() {
           </p>
         </Link>
 
+        {/* Roles & Permissions */}
         <Link
           href="/app/company/roles"
           className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition"
@@ -63,6 +112,7 @@ export default function CompanyPage() {
           </p>
         </Link>
 
+        {/* Project Access */}
         <Link
           href="/app/company/project-access"
           className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition"
@@ -78,6 +128,7 @@ export default function CompanyPage() {
           </p>
         </Link>
 
+        {/* Security */}
         <Link
           href="/app/company/security"
           className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition"
@@ -93,6 +144,7 @@ export default function CompanyPage() {
           </p>
         </Link>
 
+        {/* Audit Log */}
         <Link
           href="/app/company/audit"
           className="bg-white rounded-xl shadow p-6 hover:shadow-lg transition"
@@ -109,7 +161,6 @@ export default function CompanyPage() {
         </Link>
 
       </div>
-
     </main>
   );
 }
