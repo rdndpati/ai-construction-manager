@@ -81,6 +81,15 @@ export default function SettingsPage() {
     useState(false);
 
   // =========================================================
+  // NEW:
+  // Company Profile starts in VIEW mode.
+  // It only becomes editable after clicking Edit.
+  // =========================================================
+
+  const [isEditingCompany, setIsEditingCompany] =
+    useState(false);
+
+  // =========================================================
   // LOAD SETTINGS
   // =========================================================
 
@@ -255,14 +264,17 @@ export default function SettingsPage() {
         website:
           company.website ?? "",
 
-        // Company email is not being read from
-        // companies table because your Create Company
-        // code does not save a company email column.
         companyEmail:
           savedPreferences.companyEmail ??
           user.email ??
           "",
       });
+
+      // -------------------------------------------------------
+      // Always start in VIEW mode
+      // -------------------------------------------------------
+
+      setIsEditingCompany(false);
     } catch (err) {
       console.error(
         "SETTINGS LOAD ERROR:",
@@ -275,6 +287,39 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // =========================================================
+  // START EDITING COMPANY
+  // =========================================================
+
+  function startEditingCompany() {
+    if (!canEditCompany) {
+      setError(
+        "You do not have permission to edit the company profile."
+      );
+
+      return;
+    }
+
+    setMessage("");
+    setError("");
+    setIsEditingCompany(true);
+  }
+
+  // =========================================================
+  // CANCEL COMPANY EDIT
+  // =========================================================
+
+  async function cancelCompanyEdit() {
+    setMessage("");
+    setError("");
+
+    // Reload the actual saved company values
+    // so any unsaved changes disappear.
+    await loadCompanyOnly();
+
+    setIsEditingCompany(false);
   }
 
   // =========================================================
@@ -298,11 +343,19 @@ export default function SettingsPage() {
       return;
     }
 
+    if (!isEditingCompany) {
+      return;
+    }
+
     setSaving(true);
     setMessage("");
     setError("");
 
     try {
+      // -------------------------------------------------------
+      // Update company in Supabase
+      // -------------------------------------------------------
+
       const {
         error: updateError,
       } = await supabase
@@ -330,8 +383,10 @@ export default function SettingsPage() {
         return;
       }
 
-      // Save company email locally because the current
-      // companies table/code does not contain a company_email field.
+      // -------------------------------------------------------
+      // Save company email locally
+      // -------------------------------------------------------
+
       try {
         localStorage.setItem(
           "construction-manager-settings",
@@ -344,13 +399,22 @@ export default function SettingsPage() {
         );
       }
 
+      // -------------------------------------------------------
+      // Reload actual saved values
+      // -------------------------------------------------------
+
+      await loadCompanyOnly();
+
+      // -------------------------------------------------------
+      // IMPORTANT:
+      // Return to VIEW mode after successful save
+      // -------------------------------------------------------
+
+      setIsEditingCompany(false);
+
       setMessage(
         "Company profile saved successfully."
       );
-
-      // Reload from Supabase so the screen reflects
-      // the actual saved database values.
-      await loadCompanyOnly();
 
       setTimeout(() => {
         setMessage("");
@@ -391,6 +455,10 @@ export default function SettingsPage() {
       console.error(
         "RELOAD COMPANY ERROR:",
         companyError
+      );
+
+      setError(
+        "Unable to reload company information."
       );
 
       return;
@@ -772,7 +840,72 @@ export default function SettingsPage() {
               <SettingsCard
                 title="Company Profile"
                 description="Manage the information displayed for your construction company."
+                headerAction={
+                  canEditCompany && !isEditingCompany ? (
+                    <button
+                      type="button"
+                      onClick={startEditingCompany}
+                      className="
+                        inline-flex
+                        items-center
+                        gap-2
+                        border
+                        border-gray-300
+                        bg-white
+                        text-gray-700
+                        px-4
+                        py-2
+                        rounded-lg
+                        font-medium
+                        hover:bg-gray-50
+                        hover:border-gray-400
+                        transition
+                      "
+                    >
+                      <span>✏️</span>
+                      <span>Edit</span>
+                    </button>
+                  ) : null
+                }
               >
+
+                {/* VIEW MODE MESSAGE */}
+
+                {!isEditingCompany && canEditCompany && (
+
+                  <div className="
+                    mb-6
+                    flex
+                    items-center
+                    gap-2
+                    text-sm
+                    text-gray-500
+                  ">
+                    <span className="
+                      inline-flex
+                      items-center
+                      justify-center
+                      w-5
+                      h-5
+                      rounded-full
+                      bg-green-100
+                      text-green-600
+                    ">
+                      ✓
+                    </span>
+
+                    <span>
+                      Company information is saved. Click
+                      <strong className="mx-1">
+                        Edit
+                      </strong>
+                      to make changes.
+                    </span>
+                  </div>
+
+                )}
+
+                {/* NON-ADMIN MESSAGE */}
 
                 {!canEditCompany && (
 
@@ -793,12 +926,17 @@ export default function SettingsPage() {
 
                 )}
 
+                {/* COMPANY FIELDS */}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <Input
                     label="Company Name"
                     value={settings.companyName}
-                    disabled={!canEditCompany}
+                    disabled={
+                      !canEditCompany ||
+                      !isEditingCompany
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "companyName",
@@ -811,7 +949,10 @@ export default function SettingsPage() {
                     label="Company Email"
                     type="email"
                     value={settings.companyEmail}
-                    disabled={!canEditCompany}
+                    disabled={
+                      !canEditCompany ||
+                      !isEditingCompany
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "companyEmail",
@@ -823,7 +964,10 @@ export default function SettingsPage() {
                   <Input
                     label="Company Address"
                     value={settings.companyAddress}
-                    disabled={!canEditCompany}
+                    disabled={
+                      !canEditCompany ||
+                      !isEditingCompany
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "companyAddress",
@@ -835,7 +979,10 @@ export default function SettingsPage() {
                   <Input
                     label="Phone"
                     value={settings.phone}
-                    disabled={!canEditCompany}
+                    disabled={
+                      !canEditCompany ||
+                      !isEditingCompany
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "phone",
@@ -847,7 +994,10 @@ export default function SettingsPage() {
                   <Input
                     label="Website"
                     value={settings.website}
-                    disabled={!canEditCompany}
+                    disabled={
+                      !canEditCompany ||
+                      !isEditingCompany
+                    }
                     onChange={(value) =>
                       updateSetting(
                         "website",
@@ -857,6 +1007,8 @@ export default function SettingsPage() {
                   />
 
                 </div>
+
+                {/* INFORMATION BOX */}
 
                 <div className="
                   mt-6
@@ -873,12 +1025,86 @@ export default function SettingsPage() {
 
                 </div>
 
-                {canEditCompany && (
+                {/* ================================================= */}
+                {/* EDIT MODE BUTTONS */}
+                {/* ================================================= */}
 
-                  <SaveButton
-                    saving={saving}
-                    onClick={saveCompanyProfile}
-                  />
+                {canEditCompany && isEditingCompany && (
+
+                  <div className="
+                    mt-8
+                    flex
+                    justify-end
+                    items-center
+                    gap-3
+                  ">
+
+                    {/* CANCEL */}
+
+                    <button
+                      type="button"
+                      onClick={cancelCompanyEdit}
+                      disabled={saving}
+                      className="
+                        border
+                        border-gray-300
+                        bg-white
+                        text-gray-700
+                        px-5
+                        py-3
+                        rounded-lg
+                        font-medium
+                        hover:bg-gray-50
+                        disabled:opacity-50
+                        transition
+                      "
+                    >
+                      Cancel
+                    </button>
+
+                    {/* SAVE */}
+
+                    <button
+                      type="button"
+                      onClick={saveCompanyProfile}
+                      disabled={saving}
+                      className="
+                        inline-flex
+                        items-center
+                        gap-2
+                        bg-blue-600
+                        hover:bg-blue-700
+                        disabled:bg-gray-400
+                        text-white
+                        px-6
+                        py-3
+                        rounded-lg
+                        font-medium
+                        transition
+                      "
+                    >
+
+                      {saving ? (
+                        <>
+                          <span className="animate-spin">
+                            ⟳
+                          </span>
+
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <span>
+                            ✓
+                          </span>
+
+                          Save Changes
+                        </>
+                      )}
+
+                    </button>
+
+                  </div>
 
                 )}
 
@@ -1452,10 +1678,12 @@ function SettingsCard({
   title,
   description,
   children,
+  headerAction,
 }: {
   title: string;
   description: string;
   children: React.ReactNode;
+  headerAction?: React.ReactNode;
 }) {
   return (
     <div className="
@@ -1466,15 +1694,33 @@ function SettingsCard({
       p-8
     ">
 
-      <div className="border-b pb-6 mb-6">
+      <div className="
+        border-b
+        pb-6
+        mb-6
+        flex
+        items-start
+        justify-between
+        gap-6
+      ">
 
-        <h2 className="text-2xl font-bold text-gray-900">
-          {title}
-        </h2>
+        <div>
 
-        <p className="text-gray-500 mt-1">
-          {description}
-        </p>
+          <h2 className="text-2xl font-bold text-gray-900">
+            {title}
+          </h2>
+
+          <p className="text-gray-500 mt-1">
+            {description}
+          </p>
+
+        </div>
+
+        {headerAction && (
+          <div className="flex-shrink-0">
+            {headerAction}
+          </div>
+        )}
 
       </div>
 
@@ -1525,9 +1771,10 @@ function Input({
           focus:outline-none
           focus:ring-2
           focus:ring-blue-500
+          transition
           ${
             disabled
-              ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+              ? "bg-gray-100 text-gray-600 cursor-default border-gray-200"
               : "bg-white"
           }
         `}

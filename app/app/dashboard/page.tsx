@@ -720,7 +720,7 @@ export default function Home() {
       <header className="bg-blue-700 text-white px-8 py-6 shadow">
 
         <h1 className="text-3xl font-bold">
-          AI Construction Manager
+          ConstructIQ
         </h1>
 
         <p className="text-blue-100 mt-1">

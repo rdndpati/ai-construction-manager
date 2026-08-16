@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 export async function POST(request: Request) {
   try {
     // ============================================================
-    // 1. Get logged-in user
+    // 1. GET LOGGED-IN USER
     // ============================================================
 
     const supabase = await createClient();
@@ -18,14 +18,15 @@ export async function POST(request: Request) {
     if (userError || !user) {
       return NextResponse.json(
         {
-          error: "You must be logged in to invite a team member.",
+          error:
+            "You must be logged in to invite a team member.",
         },
         { status: 401 }
       );
     }
 
     // ============================================================
-    // 2. Read request
+    // 2. READ REQUEST
     // ============================================================
 
     const body = await request.json();
@@ -39,18 +40,18 @@ export async function POST(request: Request) {
     if (!full_name || !email || !role_id) {
       return NextResponse.json(
         {
-          error: "Full name, email, and role are required.",
+          error:
+            "Full name, email, and role are required.",
         },
         { status: 400 }
       );
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail =
+      email.trim().toLowerCase();
 
     // ============================================================
-    // 3. Get inviter's company
-    // IMPORTANT:
-    // Do not trust company_id sent from browser.
+    // 3. GET INVITER PROFILE
     // ============================================================
 
     const {
@@ -58,7 +59,9 @@ export async function POST(request: Request) {
       error: profileError,
     } = await supabase
       .from("profiles")
-      .select("company_id, is_owner, role_id")
+      .select(
+        "company_id, is_owner, role_id"
+      )
       .eq("id", user.id)
       .single();
 
@@ -80,19 +83,59 @@ export async function POST(request: Request) {
       );
     }
 
-    const companyId = inviterProfile.company_id;
-
-    console.log("====================================");
-    console.log("TEAM INVITATION");
-    console.log("INVITER:", user.id);
-    console.log("INVITER EMAIL:", user.email);
-    console.log("COMPANY:", companyId);
-    console.log("RECIPIENT:", normalizedEmail);
-    console.log("ROLE:", role_id);
-    console.log("====================================");
+    const companyId =
+      inviterProfile.company_id;
 
     // ============================================================
-    // 4. Verify role
+    // 4. VERIFY INVITER IS OWNER OR ADMIN
+    // ============================================================
+
+    let inviterIsAdmin = false;
+
+    if (inviterProfile.role_id) {
+      const {
+        data: inviterRole,
+        error: inviterRoleError,
+      } = await supabase
+        .from("roles")
+        .select("name")
+        .eq(
+          "id",
+          inviterProfile.role_id
+        )
+        .single();
+
+      if (inviterRoleError) {
+        console.error(
+          "INVITER ROLE ERROR:",
+          inviterRoleError
+        );
+      }
+
+      inviterIsAdmin =
+        inviterRole?.name
+          ?.trim()
+          .toLowerCase() === "admin";
+    }
+
+    const inviterIsOwner =
+      inviterProfile.is_owner === true;
+
+    if (
+      !inviterIsOwner &&
+      !inviterIsAdmin
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Only company owners and administrators can invite team members.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // ============================================================
+    // 5. VERIFY SELECTED ROLE
     // ============================================================
 
     const {
@@ -112,34 +155,69 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         {
-          error: "Selected role does not exist.",
+          error:
+            "Selected role does not exist.",
         },
         { status: 400 }
       );
     }
 
     // ============================================================
-    // 5. Prevent inviting yourself
+    // 6. PREVENT INVITING YOURSELF
     // ============================================================
 
     if (
       user.email &&
-      user.email.toLowerCase() === normalizedEmail
+      user.email.toLowerCase() ===
+        normalizedEmail
     ) {
       return NextResponse.json(
         {
-          error: "You cannot invite yourself.",
+          error:
+            "You cannot invite yourself.",
         },
         { status: 400 }
       );
     }
 
     // ============================================================
-    // 6. Check Supabase Auth for existing user
-    //
-    // IMPORTANT:
-    // We check Auth directly because profiles.email may not
-    // always be populated.
+    // LOG
+    // ============================================================
+
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "TEAM INVITATION"
+    );
+
+    console.log(
+      "INVITER:",
+      user.id
+    );
+
+    console.log(
+      "COMPANY:",
+      companyId
+    );
+
+    console.log(
+      "RECIPIENT:",
+      normalizedEmail
+    );
+
+    console.log(
+      "ROLE:",
+      role.name
+    );
+
+    console.log(
+      "===================================="
+    );
+
+    // ============================================================
+    // 7. FIND EXISTING AUTH USER
     // ============================================================
 
     let existingAuthUser = null;
@@ -175,28 +253,19 @@ export async function POST(request: Request) {
           normalizedEmail
       ) || null;
 
-    console.log(
-      "EXISTING AUTH USER:",
-      existingAuthUser?.id || "NONE"
-    );
-
     // ============================================================
-    // 7. EXISTING USER
-    //
-    // If the user already has a Supabase account:
-    // - Find their profile
-    // - If they have another company -> reject
-    // - If they are already in this company -> reject
-    // - If they have no company -> add them immediately
-    //
-    // No inviteUserByEmail() is called for existing users.
+    // 8. EXISTING AUTH USER
     // ============================================================
 
     if (existingAuthUser) {
       console.log(
-        "EXISTING USER FOUND:",
+        "EXISTING AUTH USER:",
         existingAuthUser.id
       );
+
+      // ----------------------------------------------------------
+      // Get profile
+      // ----------------------------------------------------------
 
       const {
         data: existingProfile,
@@ -204,9 +273,12 @@ export async function POST(request: Request) {
       } = await supabaseAdmin
         .from("profiles")
         .select(
-          "id, email, company_id, full_name, role_id"
+          "id, email, company_id, full_name, role_id, is_owner"
         )
-        .eq("id", existingAuthUser.id)
+        .eq(
+          "id",
+          existingAuthUser.id
+        )
         .maybeSingle();
 
       if (existingProfileError) {
@@ -218,37 +290,110 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error:
-              "The user exists, but their company profile could not be loaded.",
+              "The existing user's profile could not be checked.",
           },
-          { status: 400 }
+          { status: 500 }
         );
       }
 
-      // ----------------------------------------------------------
-      // Profile doesn't exist
-      // ----------------------------------------------------------
+      // ==========================================================
+      // 8A. EXISTING AUTH USER BUT NO PROFILE
+      // ==========================================================
 
       if (!existingProfile) {
-        console.error(
-          "AUTH USER HAS NO PROFILE:",
-          existingAuthUser.id
+        console.log(
+          "AUTH USER HAS NO PROFILE."
         );
 
-        return NextResponse.json(
-          {
-            error:
-              "This user has an account but does not have a company profile yet.",
-          },
-          { status: 400 }
+        console.log(
+          "CREATING COMPANY PROFILE."
         );
+
+        const {
+          data: newProfile,
+          error: createProfileError,
+        } =
+          await supabaseAdmin
+            .from("profiles")
+            .insert({
+              id: existingAuthUser.id,
+              company_id: companyId,
+              full_name:
+                full_name.trim(),
+              role_id: role_id,
+              is_owner: false,
+              email:
+                normalizedEmail,
+            })
+            .select()
+            .single();
+
+        if (createProfileError) {
+          console.error(
+            "CREATE PROFILE ERROR:",
+            createProfileError
+          );
+
+          return NextResponse.json(
+            {
+              error:
+                createProfileError.message ||
+                "Unable to create the user's company profile.",
+            },
+            { status: 400 }
+          );
+        }
+
+        console.log(
+          "PROFILE CREATED:",
+          newProfile
+        );
+
+        // --------------------------------------------------------
+        // Create invitation record as accepted
+        // --------------------------------------------------------
+
+        const {
+          error: invitationError,
+        } = await supabaseAdmin
+          .from("invitations")
+          .insert({
+            full_name:
+              full_name.trim(),
+            company_id: companyId,
+            email: normalizedEmail,
+            role_id: role_id,
+            invited_by: user.id,
+            status: "Accepted",
+          });
+
+        if (invitationError) {
+          console.error(
+            "INVITATION RECORD ERROR:",
+            invitationError
+          );
+
+          // Do not remove the profile here.
+          // The user has already been successfully
+          // connected to the company.
+        }
+
+        return NextResponse.json({
+          success: true,
+          existing_user: true,
+          profile_created: true,
+          message:
+            `${normalizedEmail} already had an account and has been added to your company successfully.`,
+        });
       }
 
-      // ----------------------------------------------------------
-      // Already belongs to this company
-      // ----------------------------------------------------------
+      // ==========================================================
+      // 8B. USER ALREADY BELONGS TO THIS COMPANY
+      // ==========================================================
 
       if (
-        existingProfile.company_id === companyId
+        existingProfile.company_id ===
+        companyId
       ) {
         return NextResponse.json(
           {
@@ -259,13 +404,14 @@ export async function POST(request: Request) {
         );
       }
 
-      // ----------------------------------------------------------
-      // Belongs to another company
-      // ----------------------------------------------------------
+      // ==========================================================
+      // 8C. USER BELONGS TO ANOTHER COMPANY
+      // ==========================================================
 
       if (
         existingProfile.company_id &&
-        existingProfile.company_id !== companyId
+        existingProfile.company_id !==
+          companyId
       ) {
         return NextResponse.json(
           {
@@ -276,100 +422,112 @@ export async function POST(request: Request) {
         );
       }
 
-      // ----------------------------------------------------------
-      // Existing user with no company
-      // Add them immediately
-      // ----------------------------------------------------------
+      // ==========================================================
+      // 8D. PROFILE EXISTS BUT HAS NO COMPANY
+      // ==========================================================
 
-      const {
-        error: updateError,
-      } = await supabaseAdmin
-        .from("profiles")
-        .update({
-          company_id: companyId,
-          role_id: role_id,
-          full_name:
-            full_name.trim() ||
-            existingProfile.full_name ||
-            null,
-          is_owner: false,
-        })
-        .eq("id", existingAuthUser.id);
+      if (
+        !existingProfile.company_id
+      ) {
+        const {
+          error: updateError,
+        } = await supabaseAdmin
+          .from("profiles")
+          .update({
+            company_id: companyId,
+            role_id: role_id,
+            full_name:
+              full_name.trim() ||
+              existingProfile.full_name ||
+              null,
+            is_owner: false,
+          })
+          .eq(
+            "id",
+            existingAuthUser.id
+          );
 
-      if (updateError) {
-        console.error(
-          "EXISTING USER COMPANY UPDATE ERROR:",
-          updateError
-        );
+        if (updateError) {
+          console.error(
+            "PROFILE COMPANY UPDATE ERROR:",
+            updateError
+          );
 
-        return NextResponse.json(
-          {
-            error: updateError.message,
-          },
-          { status: 400 }
-        );
+          return NextResponse.json(
+            {
+              error:
+                updateError.message,
+            },
+            { status: 400 }
+          );
+        }
+
+        // --------------------------------------------------------
+        // Record invitation
+        // --------------------------------------------------------
+
+        const {
+          error: invitationError,
+        } = await supabaseAdmin
+          .from("invitations")
+          .insert({
+            full_name:
+              full_name.trim(),
+            company_id: companyId,
+            email: normalizedEmail,
+            role_id: role_id,
+            invited_by: user.id,
+            status: "Accepted",
+          });
+
+        if (invitationError) {
+          console.error(
+            "INVITATION RECORD ERROR:",
+            invitationError
+          );
+        }
+
+        return NextResponse.json({
+          success: true,
+          existing_user: true,
+          message:
+            `${normalizedEmail} has been added to your company successfully.`,
+        });
       }
-
-      // ----------------------------------------------------------
-      // Mark pending invitations as accepted
-      // ----------------------------------------------------------
-
-      const {
-        error: invitationUpdateError,
-      } = await supabaseAdmin
-        .from("invitations")
-        .update({
-          status: "Accepted",
-        })
-        .eq("company_id", companyId)
-        .eq("email", normalizedEmail)
-        .eq("status", "Pending");
-
-      if (invitationUpdateError) {
-        console.error(
-          "INVITATION STATUS UPDATE ERROR:",
-          invitationUpdateError
-        );
-      }
-
-      console.log(
-        "EXISTING USER ADDED TO COMPANY:",
-        existingAuthUser.id
-      );
-
-      return NextResponse.json({
-        success: true,
-        existing_user: true,
-        message:
-          `${normalizedEmail} already had an account and has been added to your company successfully.`,
-      });
     }
 
     // ============================================================
-    // 8. NEW USER
-    //
-    // The email does not exist in Supabase Auth.
-    // Create invitation and send invitation email.
+    // 9. NEW USER
     // ============================================================
 
     console.log(
-      "NEW USER - CREATING INVITATION"
+      "NEW AUTH USER - CREATING INVITATION"
     );
 
-    // ------------------------------------------------------------
-    // Check for existing pending invitation
-    // ------------------------------------------------------------
+    // ============================================================
+    // 10. CHECK EXISTING PENDING INVITATION
+    // ============================================================
 
     const {
       data: existingInvitation,
       error: existingInvitationError,
-    } = await supabaseAdmin
-      .from("invitations")
-      .select("id, status")
-      .eq("company_id", companyId)
-      .eq("email", normalizedEmail)
-      .eq("status", "Pending")
-      .maybeSingle();
+    } =
+      await supabaseAdmin
+        .from("invitations")
+        .select("id, status")
+        .eq(
+          "company_id",
+          companyId
+        )
+        .eq(
+          "email",
+          normalizedEmail
+        )
+        .eq(
+          "status",
+          "Pending"
+        )
+        .maybeSingle();
 
     if (existingInvitationError) {
       console.error(
@@ -396,25 +554,27 @@ export async function POST(request: Request) {
       );
     }
 
-    // ------------------------------------------------------------
-    // Create invitation
-    // ------------------------------------------------------------
+    // ============================================================
+    // 11. CREATE INVITATION
+    // ============================================================
 
     const {
       data: invitation,
       error: inviteError,
-    } = await supabaseAdmin
-      .from("invitations")
-      .insert({
-        full_name: full_name.trim(),
-        company_id: companyId,
-        email: normalizedEmail,
-        role_id: role_id,
-        invited_by: user.id,
-        status: "Pending",
-      })
-      .select()
-      .single();
+    } =
+      await supabaseAdmin
+        .from("invitations")
+        .insert({
+          full_name:
+            full_name.trim(),
+          company_id: companyId,
+          email: normalizedEmail,
+          role_id: role_id,
+          invited_by: user.id,
+          status: "Pending",
+        })
+        .select()
+        .single();
 
     if (inviteError) {
       console.error(
@@ -424,14 +584,15 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         {
-          error: inviteError.message,
+          error:
+            inviteError.message,
         },
         { status: 400 }
       );
     }
 
     // ============================================================
-    // 9. Send Supabase invitation email
+    // 12. SEND SUPABASE INVITATION EMAIL
     // ============================================================
 
     const appUrl =
@@ -453,19 +614,24 @@ export async function POST(request: Request) {
       await supabaseAdmin.auth.admin.inviteUserByEmail(
         normalizedEmail,
         {
-          redirectTo: redirectUrl,
+          redirectTo:
+            redirectUrl,
 
           data: {
-            invitation_id: invitation.id,
-            company_id: companyId,
-            role_id: role_id,
-            full_name: full_name.trim(),
+            invitation_id:
+              invitation.id,
+            company_id:
+              companyId,
+            role_id:
+              role_id,
+            full_name:
+              full_name.trim(),
           },
         }
       );
 
     // ============================================================
-    // 10. Email failed
+    // 13. EMAIL FAILED
     // ============================================================
 
     if (emailError) {
@@ -474,11 +640,13 @@ export async function POST(request: Request) {
         emailError
       );
 
-      // Delete invitation because email was not sent
       await supabaseAdmin
         .from("invitations")
         .delete()
-        .eq("id", invitation.id);
+        .eq(
+          "id",
+          invitation.id
+        );
 
       return NextResponse.json(
         {
@@ -491,7 +659,7 @@ export async function POST(request: Request) {
     }
 
     // ============================================================
-    // 11. New invitation successful
+    // 14. SUCCESS
     // ============================================================
 
     console.log(
@@ -504,7 +672,8 @@ export async function POST(request: Request) {
       existing_user: false,
       message:
         `Invitation sent successfully to ${normalizedEmail}.`,
-      invitation_id: invitation.id,
+      invitation_id:
+        invitation.id,
     });
 
   } catch (error) {

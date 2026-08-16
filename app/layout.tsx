@@ -9,7 +9,7 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "AI Construction Manager",
+  title: "ConstructIQ",
   description: "Construction Project Management Platform",
 };
 

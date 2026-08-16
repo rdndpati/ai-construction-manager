@@ -78,7 +78,7 @@ if (error) {
           </div>
 
           <h1 className="text-3xl font-bold text-gray-900">
-            AI Construction Manager
+            ConstructIQ
           </h1>
 
           <p className="text-gray-500 mt-2">
@@ -185,7 +185,7 @@ if (error) {
           <div className="flex items-center gap-3 my-7">
             <div className="h-px flex-1 bg-gray-200" />
             <span className="text-sm text-gray-400">
-              New to AI Construction Manager?
+              New to ConstructIQ?
             </span>
             <div className="h-px flex-1 bg-gray-200" />
           </div>
@@ -203,7 +203,7 @@ if (error) {
 
         {/* Footer */}
         <p className="text-center text-sm text-gray-400 mt-6">
-          © 2026 AI Construction Manager
+          © 2026 ConstructIQ
         </p>
 
       </div>

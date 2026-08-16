@@ -306,7 +306,7 @@ export default function CreateCompanyPage() {
           </div>
 
           <h1 className="text-3xl font-bold text-gray-900">
-            AI Construction Manager
+            ConstructIQ
           </h1>
 
           <p className="text-gray-500 mt-2">
@@ -514,7 +514,7 @@ export default function CreateCompanyPage() {
         ================================================= */}
 
         <p className="text-center text-sm text-gray-400 mt-6">
-          © 2026 AI Construction Manager
+          © 2026 ConstructIQ
         </p>
 
       </div>

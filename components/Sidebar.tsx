@@ -90,9 +90,7 @@ export default function Sidebar() {
       <div className="mb-8">
 
         <h1 className="text-2xl font-bold leading-tight">
-          AI Construction
-          <br />
-          Manager
+          ConstructIQ
         </h1>
 
         <p className="text-xs text-slate-400 mt-2">

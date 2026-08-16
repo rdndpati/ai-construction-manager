@@ -14,14 +14,20 @@ export default function InviteMemberPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+
+  // ----------------------------------------
+  // Successful invitation information
+  // ----------------------------------------
+  const [invitationSent, setInvitationSent] = useState(false);
+  const [sentName, setSentName] = useState("");
+  const [sentEmail, setSentEmail] = useState("");
+  const [sentRole, setSentRole] = useState("");
 
   async function inviteMember(e: React.FormEvent) {
     e.preventDefault();
 
     setLoading(true);
     setError("");
-    setSuccess("");
 
     try {
       // ----------------------------------------
@@ -48,7 +54,11 @@ export default function InviteMemberPage() {
 
       if (profileError) {
         console.error("Profile error:", profileError);
-        setError("Unable to load your company information.");
+
+        setError(
+          "Unable to load your company information."
+        );
+
         return;
       }
 
@@ -56,6 +66,7 @@ export default function InviteMemberPage() {
         setError(
           "You are not connected to a company. Please create or join a company first."
         );
+
         return;
       }
 
@@ -68,7 +79,11 @@ export default function InviteMemberPage() {
 
       if (roleError) {
         console.error("Role error:", roleError);
-        setError("Unable to load available roles.");
+
+        setError(
+          "Unable to load available roles."
+        );
+
         return;
       }
 
@@ -86,7 +101,8 @@ export default function InviteMemberPage() {
       // ----------------------------------------
       if (
         user.email &&
-        user.email.toLowerCase() === email.trim().toLowerCase()
+        user.email.toLowerCase() ===
+          email.trim().toLowerCase()
       ) {
         setError("You cannot invite yourself.");
         return;
@@ -95,62 +111,104 @@ export default function InviteMemberPage() {
       // ----------------------------------------
       // 5. Send invitation
       // ----------------------------------------
-      const response = await fetch("/api/team/invite", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          full_name: fullName.trim(),
-          email: email.trim().toLowerCase(),
-          role_id: selectedRole.id,
+      const response = await fetch(
+        "/api/team/invite",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            full_name: fullName.trim(),
+            email: email.trim().toLowerCase(),
+            role_id: selectedRole.id,
 
-          // Keep these because your existing API expects them.
-          company_id: profile.company_id,
-          invited_by: user.id,
-        }),
-      });
+            // Existing API expects these
+            company_id: profile.company_id,
+            invited_by: user.id,
+          }),
+        }
+      );
 
       const result = await response.json();
 
-      
-
-console.log("====================================");
-console.log("INVITATION API RESPONSE");
-console.log("STATUS:", response.status);
-console.log("OK:", response.ok);
-console.log("RESULT:", result);
-console.log("RESULT JSON:", JSON.stringify(result, null, 2));
-console.log("====================================");
-
-if (!response.ok) {
-  console.error(
-    "Invitation API error:",
-    result?.error || result
-  );
-
-  setError(
-    result?.error ||
-      "Failed to send invitation."
-  );
-
-  setLoading(false);
-  return;
-}
-
-      // ----------------------------------------
-      // 6. Success
-      // ----------------------------------------
-      setSuccess(
-        `Invitation sent successfully to ${email.trim().toLowerCase()}.`
+      console.log(
+        "===================================="
       );
 
+      console.log(
+        "INVITATION API RESPONSE"
+      );
+
+      console.log(
+        "STATUS:",
+        response.status
+      );
+
+      console.log(
+        "OK:",
+        response.ok
+      );
+
+      console.log(
+        "RESULT:",
+        result
+      );
+
+      console.log(
+        "RESULT JSON:",
+        JSON.stringify(
+          result,
+          null,
+          2
+        )
+      );
+
+      console.log(
+        "===================================="
+      );
+
+      // ----------------------------------------
+      // 6. Handle API error
+      // ----------------------------------------
+      if (!response.ok) {
+        console.error(
+          "Invitation API error:",
+          result?.error || result
+        );
+
+        setError(
+          result?.error ||
+            "Failed to send invitation."
+        );
+
+        return;
+      }
+
+      // ----------------------------------------
+      // 7. Save successful invitation details
+      // ----------------------------------------
+      setSentName(fullName.trim());
+      setSentEmail(
+        email.trim().toLowerCase()
+      );
+      setSentRole(role);
+
+      // ----------------------------------------
+      // 8. Show professional success screen
+      // ----------------------------------------
+      setInvitationSent(true);
+
+      // Clear form
       setFullName("");
       setEmail("");
       setRole("Project Engineer");
 
     } catch (err) {
-      console.error("Invitation error:", err);
+      console.error(
+        "Invitation error:",
+        err
+      );
 
       setError(
         "Something went wrong while sending the invitation."
@@ -160,27 +218,237 @@ if (!response.ok) {
     }
   }
 
+  // =====================================================
+  // SUCCESS SCREEN
+  // =====================================================
+
+  if (invitationSent) {
+    return (
+      <main className="min-h-screen bg-gray-50 p-8">
+
+        <div className="max-w-3xl mx-auto">
+
+          {/* Back */}
+          <Link
+            href="/app/company/team"
+            className="inline-flex items-center text-sm text-gray-600 hover:text-blue-600 mb-8 transition"
+          >
+            ← Back to Team Members
+          </Link>
+
+          {/* Success Card */}
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+
+            {/* Header */}
+            <div className="px-8 pt-10 pb-8 text-center">
+
+              {/* Success Icon */}
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                <svg
+                  className="h-8 w-8 text-green-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2.5}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+
+              {/* Title */}
+              <h1 className="mt-6 text-3xl font-bold text-gray-900">
+                Invitation Sent
+              </h1>
+
+              <p className="mt-2 text-gray-500">
+                The team member has been successfully invited
+                to your company.
+              </p>
+            </div>
+
+            {/* Invitation Details */}
+            <div className="border-t border-gray-100 px-8 py-7">
+
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">
+                Invitation Details
+              </h2>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 divide-y divide-gray-200">
+
+                {/* Name */}
+                <div className="flex items-center justify-between px-5 py-4">
+                  <span className="text-sm text-gray-500">
+                    Full Name
+                  </span>
+
+                  <span className="text-sm font-semibold text-gray-900">
+                    {sentName}
+                  </span>
+                </div>
+
+                {/* Email */}
+                <div className="flex items-center justify-between px-5 py-4">
+                  <span className="text-sm text-gray-500">
+                    Email Address
+                  </span>
+
+                  <span className="text-sm font-semibold text-gray-900 break-all ml-6 text-right">
+                    {sentEmail}
+                  </span>
+                </div>
+
+                {/* Role */}
+                <div className="flex items-center justify-between px-5 py-4">
+                  <span className="text-sm text-gray-500">
+                    Role
+                  </span>
+
+                  <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                    {sentRole}
+                  </span>
+                </div>
+
+                {/* Status */}
+                <div className="flex items-center justify-between px-5 py-4">
+                  <span className="text-sm text-gray-500">
+                    Status
+                  </span>
+
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-green-600">
+                    <span className="h-2 w-2 rounded-full bg-green-500" />
+                    Invitation Sent
+                  </span>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Information */}
+            <div className="px-8 pb-7">
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+
+                <div className="flex gap-3">
+
+                  <div className="flex-shrink-0">
+
+                    <svg
+                      className="h-5 w-5 text-blue-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"
+                      />
+                    </svg>
+
+                  </div>
+
+                  <div>
+
+                    <p className="text-sm font-semibold text-blue-800">
+                      What happens next?
+                    </p>
+
+                    <p className="mt-1 text-sm text-blue-700">
+                      An invitation email has been sent to{" "}
+                      <span className="font-semibold">
+                        {sentEmail}
+                      </span>
+                      . They can use the invitation to join
+                      your company.
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Actions */}
+            <div className="border-t border-gray-100 bg-gray-50 px-8 py-6">
+
+              <div className="flex flex-col sm:flex-row gap-3">
+
+                {/* Back */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      "/app/company/team"
+                    )
+                  }
+                  className="flex-1 rounded-xl border border-gray-300 bg-white px-5 py-3.5 font-semibold text-gray-700 transition hover:bg-gray-100"
+                >
+                  Back to Team Members
+                </button>
+
+                {/* Invite Another */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInvitationSent(false);
+                    setSentName("");
+                    setSentEmail("");
+                    setSentRole("");
+                    setError("");
+                  }}
+                  className="flex-1 rounded-xl bg-blue-600 px-5 py-3.5 font-semibold text-white transition hover:bg-blue-700"
+                >
+                  + Invite Another Member
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </main>
+    );
+  }
+
+  // =====================================================
+  // INVITATION FORM
+  // =====================================================
+
   return (
-    <main className="min-h-screen p-8 bg-gray-50">
+    <main className="min-h-screen bg-gray-50 p-8">
+
       <div className="max-w-3xl mx-auto">
 
         {/* Back */}
         <Link
           href="/app/company/team"
-          className="inline-flex items-center text-sm text-gray-600 hover:text-blue-600 mb-6"
+          className="inline-flex items-center text-sm text-gray-600 hover:text-blue-600 mb-6 transition"
         >
           ← Back to Team Members
         </Link>
 
         {/* Header */}
         <div className="mb-8">
+
           <h1 className="text-4xl font-bold text-gray-900">
             Invite Team Member
           </h1>
 
           <p className="text-gray-500 mt-2">
-            Add a team member to your company and assign their role.
+            Add a team member to your company and assign
+            their role.
           </p>
+
         </div>
 
         {/* Card */}
@@ -193,6 +461,7 @@ if (!response.ok) {
 
             {/* Full Name */}
             <div>
+
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Full Name
               </label>
@@ -202,13 +471,17 @@ if (!response.ok) {
                 className="w-full border border-gray-300 rounded-xl p-3.5 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="John Smith"
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e) =>
+                  setFullName(e.target.value)
+                }
                 required
               />
+
             </div>
 
             {/* Email */}
             <div>
+
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Email Address
               </label>
@@ -218,17 +491,22 @@ if (!response.ok) {
                 className="w-full border border-gray-300 rounded-xl p-3.5 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="john@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) =>
+                  setEmail(e.target.value)
+                }
                 required
               />
 
               <p className="text-xs text-gray-500 mt-2">
-                An invitation email will be sent to this address.
+                An invitation email will be sent to this
+                address.
               </p>
+
             </div>
 
             {/* Role */}
             <div>
+
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Role
               </label>
@@ -236,27 +514,55 @@ if (!response.ok) {
               <select
                 className="w-full border border-gray-300 rounded-xl p-3.5 bg-white outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
+                onChange={(e) =>
+                  setRole(e.target.value)
+                }
               >
-                <option>Project Engineer</option>
-                <option>Project Manager</option>
-                <option>Engineer of Record</option>
-                <option>QA/QC</option>
-                <option>Client</option>
-                <option>Admin</option>
-                <option>Super Admin</option>
+
+                <option>
+                  Project Engineer
+                </option>
+
+                <option>
+                  Project Manager
+                </option>
+
+                <option>
+                  Engineer of Record
+                </option>
+
+                <option>
+                  QA/QC
+                </option>
+
+                <option>
+                  Client
+                </option>
+
+                <option>
+                  Admin
+                </option>
+
+                <option>
+                  Super Admin
+                </option>
+
               </select>
+
             </div>
 
             {/* Error */}
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+
                 <div className="flex gap-3">
+
                   <div className="text-red-600 font-bold">
                     !
                   </div>
 
                   <div>
+
                     <p className="font-semibold text-red-700">
                       Invitation failed
                     </p>
@@ -264,29 +570,11 @@ if (!response.ok) {
                     <p className="text-sm text-red-600 mt-1">
                       {error}
                     </p>
+
                   </div>
+
                 </div>
-              </div>
-            )}
 
-            {/* Success */}
-            {success && (
-              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-                <div className="flex gap-3">
-                  <div className="text-green-600 font-bold">
-                    ✓
-                  </div>
-
-                  <div>
-                    <p className="font-semibold text-green-700">
-                      Invitation sent
-                    </p>
-
-                    <p className="text-sm text-green-600 mt-1">
-                      {success}
-                    </p>
-                  </div>
-                </div>
               </div>
             )}
 
@@ -295,8 +583,12 @@ if (!response.ok) {
 
               <button
                 type="button"
-                onClick={() => router.push("/app/company/team")}
-                className="flex-1 border border-gray-300 text-gray-700 rounded-xl p-3.5 font-semibold hover:bg-gray-50"
+                onClick={() =>
+                  router.push(
+                    "/app/company/team"
+                  )
+                }
+                className="flex-1 border border-gray-300 text-gray-700 rounded-xl p-3.5 font-semibold hover:bg-gray-50 transition"
               >
                 Cancel
               </button>
@@ -304,7 +596,7 @@ if (!response.ok) {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl p-3.5 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl p-3.5 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 {loading
                   ? "Sending Invitation..."
@@ -314,9 +606,11 @@ if (!response.ok) {
             </div>
 
           </form>
+
         </div>
 
       </div>
+
     </main>
   );
 }
