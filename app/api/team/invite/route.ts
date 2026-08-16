@@ -47,11 +47,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedEmail =
-      email.trim().toLowerCase();
+    const normalizedEmail = email
+      .trim()
+      .toLowerCase();
 
-    const normalizedName =
-      full_name.trim();
+    const normalizedName = full_name.trim();
 
     // ============================================================
     // 3. GET INVITER PROFILE
@@ -62,9 +62,7 @@ export async function POST(request: Request) {
       error: profileError,
     } = await supabase
       .from("profiles")
-      .select(
-        "company_id, is_owner, role_id"
-      )
+      .select("company_id, is_owner, role_id")
       .eq("id", user.id)
       .single();
 
@@ -118,8 +116,7 @@ export async function POST(request: Request) {
       inviterIsAdmin =
         inviterRole?.name
           ?.trim()
-          .toLowerCase() ===
-        "admin";
+          .toLowerCase() === "admin";
     }
 
     const inviterIsOwner =
@@ -239,15 +236,6 @@ export async function POST(request: Request) {
     // ============================================================
     // 8. CHECK WHETHER AUTH USER ALREADY EXISTS
     // ============================================================
-    //
-    // IMPORTANT:
-    //
-    // We ONLY CHECK whether the user exists.
-    //
-    // We DO NOT create an Auth user.
-    //
-    // This is the key change for Option A.
-    // ============================================================
 
     let existingAuthUser = null;
 
@@ -283,7 +271,7 @@ export async function POST(request: Request) {
       ) || null;
 
     // ============================================================
-    // 9. EXISTING USER ALREADY IN THIS COMPANY
+    // 9. CHECK EXISTING USER PROFILE
     // ============================================================
 
     if (existingAuthUser) {
@@ -317,6 +305,7 @@ export async function POST(request: Request) {
         );
       }
 
+      // Already belongs to this company
       if (
         existingProfile?.company_id ===
         companyId
@@ -330,10 +319,7 @@ export async function POST(request: Request) {
         );
       }
 
-      // ----------------------------------------------------------
-      // User belongs to another company
-      // ----------------------------------------------------------
-
+      // Already belongs to another company
       if (
         existingProfile?.company_id &&
         existingProfile.company_id !==
@@ -360,18 +346,12 @@ export async function POST(request: Request) {
       await supabaseAdmin
         .from("invitations")
         .insert({
-          full_name:
-            normalizedName,
-          company_id:
-            companyId,
-          email:
-            normalizedEmail,
-          role_id:
-            role_id,
-          invited_by:
-            user.id,
-          status:
-            "Pending",
+          full_name: normalizedName,
+          company_id: companyId,
+          email: normalizedEmail,
+          role_id: role_id,
+          invited_by: user.id,
+          status: "Pending",
         })
         .select()
         .single();
@@ -448,25 +428,33 @@ export async function POST(request: Request) {
     );
 
     // ============================================================
-    // 12. CHECK EMAIL CONFIGURATION
+    // 12. RESEND EMAIL CONFIGURATION
     // ============================================================
 
     const resendApiKey =
       process.env.RESEND_API_KEY;
 
-    const fromEmail =
-      process.env.RESEND_FROM_EMAIL;
+    /*
+     * Production:
+     *
+     * RESEND_FROM_EMAIL=noreply@yourverifieddomain.com
+     *
+     * Development fallback:
+     *
+     * onboarding@resend.dev
+     */
 
-    if (
-      !resendApiKey ||
-      !fromEmail
-    ) {
+    const fromEmail =
+      process.env.RESEND_FROM_EMAIL ||
+      "onboarding@resend.dev";
+
+    if (!resendApiKey) {
       console.error(
-        "EMAIL CONFIGURATION MISSING"
+        "RESEND_API_KEY IS MISSING"
       );
 
-      // Remove invitation because we cannot
-      // complete the invitation process.
+      // Remove invitation because email
+      // cannot be sent.
 
       await supabaseAdmin
         .from("invitations")
@@ -479,14 +467,14 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "Invitation email service is not configured. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL.",
+            "Invitation email service is not configured. Please configure RESEND_API_KEY.",
         },
         { status: 500 }
       );
     }
 
     // ============================================================
-    // 13. SEND INVITATION EMAIL WITH RESEND
+    // 13. SEND INVITATION EMAIL
     // ============================================================
 
     const emailResponse =
@@ -504,8 +492,7 @@ export async function POST(request: Request) {
           },
 
           body: JSON.stringify({
-            from:
-              fromEmail,
+            from: fromEmail,
 
             to: [
               normalizedEmail,
@@ -520,110 +507,176 @@ export async function POST(request: Request) {
 <html>
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
 </head>
 
-<body style="margin:0; padding:0; background:#f3f4f6; font-family:Arial, Helvetica, sans-serif;">
+<body
+  style="
+    margin:0;
+    padding:0;
+    background:#f3f4f6;
+    font-family:Arial, Helvetica, sans-serif;
+  "
+>
 
-  <div style="max-width:600px; margin:40px auto; padding:20px;">
+  <div
+    style="
+      max-width:600px;
+      margin:40px auto;
+      padding:20px;
+    "
+  >
 
-    <div style="background:#ffffff; border-radius:16px; padding:40px; border:1px solid #e5e7eb;">
+    <div
+      style="
+        background:#ffffff;
+        border-radius:16px;
+        padding:40px;
+        border:1px solid #e5e7eb;
+      "
+    >
 
-      <div style="text-align:center; margin-bottom:30px;">
+      <!-- BRAND -->
 
-        <div style="
-          width:64px;
-          height:64px;
-          margin:0 auto 16px;
-          background:#2563eb;
-          border-radius:16px;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          font-size:30px;
-          line-height:64px;
-        ">
+      <div
+        style="
+          text-align:center;
+          margin-bottom:30px;
+        "
+      >
+
+        <div
+          style="
+            width:64px;
+            height:64px;
+            margin:0 auto 16px;
+            background:#2563eb;
+            border-radius:16px;
+            font-size:30px;
+            line-height:64px;
+            text-align:center;
+          "
+        >
           🏗️
         </div>
 
-        <h1 style="
-          margin:0;
-          color:#111827;
-          font-size:28px;
-        ">
+        <h1
+          style="
+            margin:0;
+            color:#111827;
+            font-size:28px;
+          "
+        >
           ConstructIQ
         </h1>
 
-        <p style="
-          margin:8px 0 0;
-          color:#6b7280;
-          font-size:14px;
-        ">
+        <p
+          style="
+            margin:8px 0 0;
+            color:#6b7280;
+            font-size:14px;
+          "
+        >
           Engineering Project Management Platform
         </p>
 
       </div>
 
-      <h2 style="
-        color:#111827;
-        font-size:22px;
-        margin-bottom:10px;
-      ">
+      <!-- TITLE -->
+
+      <h2
+        style="
+          color:#111827;
+          font-size:22px;
+          margin-bottom:10px;
+        "
+      >
         You're invited to join ConstructIQ
       </h2>
 
-      <p style="
-        color:#4b5563;
-        font-size:16px;
-        line-height:1.6;
-      ">
+      <!-- NAME -->
+
+      <p
+        style="
+          color:#4b5563;
+          font-size:16px;
+          line-height:1.6;
+        "
+      >
         Hello ${escapeHtml(normalizedName)},
       </p>
 
-      <p style="
-        color:#4b5563;
-        font-size:16px;
-        line-height:1.6;
-      ">
-        You have been invited to join a company on ConstructIQ as:
+      <p
+        style="
+          color:#4b5563;
+          font-size:16px;
+          line-height:1.6;
+        "
+      >
+        You have been invited to join a company
+        on ConstructIQ as:
       </p>
 
-      <div style="
-        background:#eff6ff;
-        border:1px solid #bfdbfe;
-        border-radius:12px;
-        padding:18px;
-        margin:24px 0;
-      ">
+      <!-- ROLE -->
 
-        <p style="
-          margin:0 0 6px;
-          color:#6b7280;
-          font-size:13px;
-        ">
+      <div
+        style="
+          background:#eff6ff;
+          border:1px solid #bfdbfe;
+          border-radius:12px;
+          padding:18px;
+          margin:24px 0;
+        "
+      >
+
+        <p
+          style="
+            margin:0 0 6px;
+            color:#6b7280;
+            font-size:13px;
+          "
+        >
           Your role
         </p>
 
-        <p style="
-          margin:0;
-          color:#1d4ed8;
-          font-size:18px;
-          font-weight:bold;
-        ">
+        <p
+          style="
+            margin:0;
+            color:#1d4ed8;
+            font-size:18px;
+            font-weight:bold;
+          "
+        >
           ${escapeHtml(role.name)}
         </p>
 
       </div>
 
-      <p style="
-        color:#4b5563;
-        font-size:16px;
-        line-height:1.6;
-      ">
-        Click the button below to accept your invitation and create or access your ConstructIQ account.
+      <!-- INSTRUCTIONS -->
+
+      <p
+        style="
+          color:#4b5563;
+          font-size:16px;
+          line-height:1.6;
+        "
+      >
+        Click the button below to accept your
+        invitation and access your ConstructIQ
+        account.
       </p>
 
-      <div style="text-align:center; margin:32px 0;">
+      <!-- BUTTON -->
+
+      <div
+        style="
+          text-align:center;
+          margin:32px 0;
+        "
+      >
 
         <a
           href="${invitationUrl}"
@@ -643,26 +696,60 @@ export async function POST(request: Request) {
 
       </div>
 
-      <p style="
-        color:#9ca3af;
-        font-size:13px;
-        line-height:1.5;
-      ">
-        If you did not expect this invitation, you can safely ignore this email.
+      <!-- FALLBACK LINK -->
+
+      <p
+        style="
+          color:#6b7280;
+          font-size:13px;
+          line-height:1.5;
+        "
+      >
+        If the button does not work, copy and paste
+        the following link into your browser:
       </p>
 
-      <hr style="
-        border:none;
-        border-top:1px solid #e5e7eb;
-        margin:30px 0;
-      " />
+      <p
+        style="
+          color:#2563eb;
+          font-size:12px;
+          line-height:1.5;
+          word-break:break-all;
+        "
+      >
+        ${escapeHtml(invitationUrl)}
+      </p>
 
-      <p style="
-        color:#9ca3af;
-        font-size:12px;
-        text-align:center;
-        margin:0;
-      ">
+      <!-- SECURITY -->
+
+      <p
+        style="
+          color:#9ca3af;
+          font-size:13px;
+          line-height:1.5;
+          margin-top:24px;
+        "
+      >
+        If you did not expect this invitation,
+        you can safely ignore this email.
+      </p>
+
+      <hr
+        style="
+          border:none;
+          border-top:1px solid #e5e7eb;
+          margin:30px 0;
+        "
+      />
+
+      <p
+        style="
+          color:#9ca3af;
+          font-size:12px;
+          text-align:center;
+          margin:0;
+        "
+      >
         © 2026 ConstructIQ
       </p>
 
@@ -677,11 +764,15 @@ export async function POST(request: Request) {
         }
       );
 
+    // ============================================================
+    // 14. READ RESEND RESPONSE
+    // ============================================================
+
     const emailResult =
       await emailResponse.json();
 
     // ============================================================
-    // 14. EMAIL FAILED
+    // 15. EMAIL FAILED
     // ============================================================
 
     if (!emailResponse.ok) {
@@ -690,8 +781,7 @@ export async function POST(request: Request) {
         emailResult
       );
 
-      // Remove pending invitation if email
-      // could not be sent.
+      // Delete invitation if email failed.
 
       await supabaseAdmin
         .from("invitations")
@@ -713,16 +803,39 @@ export async function POST(request: Request) {
     }
 
     // ============================================================
-    // 15. SUCCESS
+    // 16. SUCCESS
     // ============================================================
 
     console.log(
-      "INVITATION EMAIL SENT"
+      "===================================="
+    );
+
+    console.log(
+      "INVITATION EMAIL SENT SUCCESSFULLY"
+    );
+
+    console.log(
+      "EMAIL:",
+      normalizedEmail
+    );
+
+    console.log(
+      "INVITATION ID:",
+      invitation.id
+    );
+
+    console.log(
+      "EXISTING USER:",
+      Boolean(existingAuthUser)
     );
 
     console.log(
       "RESEND RESULT:",
       emailResult
+    );
+
+    console.log(
+      "===================================="
     );
 
     return NextResponse.json({
@@ -759,7 +872,7 @@ export async function POST(request: Request) {
 }
 
 // ============================================================
-// SIMPLE HTML ESCAPING
+// HTML ESCAPING
 // ============================================================
 
 function escapeHtml(
