@@ -62,7 +62,9 @@ export async function POST(request: Request) {
       error: profileError,
     } = await supabase
       .from("profiles")
-      .select("company_id, is_owner, role_id")
+      .select(
+        "company_id, is_owner, role_id"
+      )
       .eq("id", user.id)
       .single();
 
@@ -182,7 +184,7 @@ export async function POST(request: Request) {
     }
 
     // ============================================================
-    // 7. CHECK FOR EXISTING PENDING INVITATION
+    // 7. CHECK EXISTING PENDING INVITATION
     // ============================================================
 
     const {
@@ -228,6 +230,8 @@ export async function POST(request: Request) {
         {
           error:
             "An invitation is already pending for this email address.",
+          invitation_id:
+            existingInvitation.id,
         },
         { status: 400 }
       );
@@ -428,53 +432,49 @@ export async function POST(request: Request) {
     );
 
     // ============================================================
-    // 12. RESEND EMAIL CONFIGURATION
+    // 12. RESEND CONFIGURATION
     // ============================================================
 
     const resendApiKey =
       process.env.RESEND_API_KEY;
 
-    /*
-     * Production:
-     *
-     * RESEND_FROM_EMAIL=noreply@yourverifieddomain.com
-     *
-     * Development fallback:
-     *
-     * onboarding@resend.dev
-     */
-
     const fromEmail =
       process.env.RESEND_FROM_EMAIL ||
       "onboarding@resend.dev";
 
+    // ============================================================
+    // 13. IF RESEND IS NOT CONFIGURED
+    //
+    // IMPORTANT:
+    // DO NOT DELETE THE INVITATION.
+    //
+    // The invitation remains valid and the user can
+    // join using the invitation URL.
+    // ============================================================
+
     if (!resendApiKey) {
-      console.error(
-        "RESEND_API_KEY IS MISSING"
+      console.warn(
+        "RESEND_API_KEY is missing. Invitation created without email."
       );
 
-      // Remove invitation because email
-      // cannot be sent.
-
-      await supabaseAdmin
-        .from("invitations")
-        .delete()
-        .eq(
-          "id",
-          invitation.id
-        );
-
-      return NextResponse.json(
-        {
-          error:
-            "Invitation email service is not configured. Please configure RESEND_API_KEY.",
-        },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        success: true,
+        email_sent: false,
+        email_error:
+          "Email service is not configured.",
+        existing_user:
+          Boolean(existingAuthUser),
+        message:
+          "Invitation created successfully. Copy the invitation link and send it to the team member.",
+        invitation_id:
+          invitation.id,
+        invitation_url:
+          invitationUrl,
+      });
     }
 
     // ============================================================
-    // 13. SEND INVITATION EMAIL
+    // 14. SEND INVITATION EMAIL
     // ============================================================
 
     const emailResponse =
@@ -539,8 +539,6 @@ export async function POST(request: Request) {
       "
     >
 
-      <!-- BRAND -->
-
       <div
         style="
           text-align:center;
@@ -585,8 +583,6 @@ export async function POST(request: Request) {
 
       </div>
 
-      <!-- TITLE -->
-
       <h2
         style="
           color:#111827;
@@ -596,8 +592,6 @@ export async function POST(request: Request) {
       >
         You're invited to join ConstructIQ
       </h2>
-
-      <!-- NAME -->
 
       <p
         style="
@@ -619,8 +613,6 @@ export async function POST(request: Request) {
         You have been invited to join a company
         on ConstructIQ as:
       </p>
-
-      <!-- ROLE -->
 
       <div
         style="
@@ -655,8 +647,6 @@ export async function POST(request: Request) {
 
       </div>
 
-      <!-- INSTRUCTIONS -->
-
       <p
         style="
           color:#4b5563;
@@ -668,8 +658,6 @@ export async function POST(request: Request) {
         invitation and access your ConstructIQ
         account.
       </p>
-
-      <!-- BUTTON -->
 
       <div
         style="
@@ -696,8 +684,6 @@ export async function POST(request: Request) {
 
       </div>
 
-      <!-- FALLBACK LINK -->
-
       <p
         style="
           color:#6b7280;
@@ -719,8 +705,6 @@ export async function POST(request: Request) {
       >
         ${escapeHtml(invitationUrl)}
       </p>
-
-      <!-- SECURITY -->
 
       <p
         style="
@@ -765,14 +749,17 @@ export async function POST(request: Request) {
       );
 
     // ============================================================
-    // 14. READ RESEND RESPONSE
+    // 15. READ RESEND RESPONSE
     // ============================================================
 
     const emailResult =
       await emailResponse.json();
 
     // ============================================================
-    // 15. EMAIL FAILED
+    // 16. RESEND FAILED
+    //
+    // IMPORTANT:
+    // DO NOT DELETE THE INVITATION.
     // ============================================================
 
     if (!emailResponse.ok) {
@@ -781,29 +768,32 @@ export async function POST(request: Request) {
         emailResult
       );
 
-      // Delete invitation if email failed.
+      return NextResponse.json({
+        success: true,
 
-      await supabaseAdmin
-        .from("invitations")
-        .delete()
-        .eq(
-          "id",
-          invitation.id
-        );
+        email_sent: false,
 
-      return NextResponse.json(
-        {
-          error:
-            emailResult?.message ||
-            emailResult?.error ||
-            "Invitation email could not be sent.",
-        },
-        { status: 500 }
-      );
+        email_error:
+          emailResult?.message ||
+          emailResult?.error ||
+          "Invitation email could not be sent.",
+
+        existing_user:
+          Boolean(existingAuthUser),
+
+        message:
+          "Invitation was created successfully, but the email could not be delivered. Copy the invitation link and send it manually.",
+
+        invitation_id:
+          invitation.id,
+
+        invitation_url:
+          invitationUrl,
+      });
     }
 
     // ============================================================
-    // 16. SUCCESS
+    // 17. EMAIL SENT SUCCESSFULLY
     // ============================================================
 
     console.log(
@@ -841,6 +831,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
 
+      email_sent: true,
+
       existing_user:
         Boolean(existingAuthUser),
 
@@ -849,6 +841,9 @@ export async function POST(request: Request) {
 
       invitation_id:
         invitation.id,
+
+      invitation_url:
+        invitationUrl,
     });
 
   } catch (error) {
