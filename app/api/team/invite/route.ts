@@ -50,6 +50,9 @@ export async function POST(request: Request) {
     const normalizedEmail =
       email.trim().toLowerCase();
 
+    const normalizedName =
+      full_name.trim();
+
     // ============================================================
     // 3. GET INVITER PROFILE
     // ============================================================
@@ -115,7 +118,8 @@ export async function POST(request: Request) {
       inviterIsAdmin =
         inviterRole?.name
           ?.trim()
-          .toLowerCase() === "admin";
+          .toLowerCase() ===
+        "admin";
     }
 
     const inviterIsOwner =
@@ -181,331 +185,7 @@ export async function POST(request: Request) {
     }
 
     // ============================================================
-    // LOG
-    // ============================================================
-
-    console.log(
-      "===================================="
-    );
-
-    console.log(
-      "TEAM INVITATION"
-    );
-
-    console.log(
-      "INVITER:",
-      user.id
-    );
-
-    console.log(
-      "COMPANY:",
-      companyId
-    );
-
-    console.log(
-      "RECIPIENT:",
-      normalizedEmail
-    );
-
-    console.log(
-      "ROLE:",
-      role.name
-    );
-
-    console.log(
-      "===================================="
-    );
-
-    // ============================================================
-    // 7. FIND EXISTING AUTH USER
-    // ============================================================
-
-    let existingAuthUser = null;
-
-    const {
-      data: authUsers,
-      error: authUsersError,
-    } =
-      await supabaseAdmin.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000,
-      });
-
-    if (authUsersError) {
-      console.error(
-        "AUTH USER LOOKUP ERROR:",
-        authUsersError
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "Unable to check existing user accounts.",
-        },
-        { status: 500 }
-      );
-    }
-
-    existingAuthUser =
-      authUsers.users.find(
-        (authUser) =>
-          authUser.email?.toLowerCase() ===
-          normalizedEmail
-      ) || null;
-
-    // ============================================================
-    // 8. EXISTING AUTH USER
-    // ============================================================
-
-    if (existingAuthUser) {
-      console.log(
-        "EXISTING AUTH USER:",
-        existingAuthUser.id
-      );
-
-      // ----------------------------------------------------------
-      // Get profile
-      // ----------------------------------------------------------
-
-      const {
-        data: existingProfile,
-        error: existingProfileError,
-      } = await supabaseAdmin
-        .from("profiles")
-        .select(
-          "id, email, company_id, full_name, role_id, is_owner"
-        )
-        .eq(
-          "id",
-          existingAuthUser.id
-        )
-        .maybeSingle();
-
-      if (existingProfileError) {
-        console.error(
-          "EXISTING PROFILE ERROR:",
-          existingProfileError
-        );
-
-        return NextResponse.json(
-          {
-            error:
-              "The existing user's profile could not be checked.",
-          },
-          { status: 500 }
-        );
-      }
-
-      // ==========================================================
-      // 8A. EXISTING AUTH USER BUT NO PROFILE
-      // ==========================================================
-
-      if (!existingProfile) {
-        console.log(
-          "AUTH USER HAS NO PROFILE."
-        );
-
-        console.log(
-          "CREATING COMPANY PROFILE."
-        );
-
-        const {
-          data: newProfile,
-          error: createProfileError,
-        } =
-          await supabaseAdmin
-            .from("profiles")
-            .insert({
-              id: existingAuthUser.id,
-              company_id: companyId,
-              full_name:
-                full_name.trim(),
-              role_id: role_id,
-              is_owner: false,
-              email:
-                normalizedEmail,
-            })
-            .select()
-            .single();
-
-        if (createProfileError) {
-          console.error(
-            "CREATE PROFILE ERROR:",
-            createProfileError
-          );
-
-          return NextResponse.json(
-            {
-              error:
-                createProfileError.message ||
-                "Unable to create the user's company profile.",
-            },
-            { status: 400 }
-          );
-        }
-
-        console.log(
-          "PROFILE CREATED:",
-          newProfile
-        );
-
-        // --------------------------------------------------------
-        // Create invitation record as accepted
-        // --------------------------------------------------------
-
-        const {
-          error: invitationError,
-        } = await supabaseAdmin
-          .from("invitations")
-          .insert({
-            full_name:
-              full_name.trim(),
-            company_id: companyId,
-            email: normalizedEmail,
-            role_id: role_id,
-            invited_by: user.id,
-            status: "Accepted",
-          });
-
-        if (invitationError) {
-          console.error(
-            "INVITATION RECORD ERROR:",
-            invitationError
-          );
-
-          // Do not remove the profile here.
-          // The user has already been successfully
-          // connected to the company.
-        }
-
-        return NextResponse.json({
-          success: true,
-          existing_user: true,
-          profile_created: true,
-          message:
-            `${normalizedEmail} already had an account and has been added to your company successfully.`,
-        });
-      }
-
-      // ==========================================================
-      // 8B. USER ALREADY BELONGS TO THIS COMPANY
-      // ==========================================================
-
-      if (
-        existingProfile.company_id ===
-        companyId
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "This user is already a member of your company.",
-          },
-          { status: 400 }
-        );
-      }
-
-      // ==========================================================
-      // 8C. USER BELONGS TO ANOTHER COMPANY
-      // ==========================================================
-
-      if (
-        existingProfile.company_id &&
-        existingProfile.company_id !==
-          companyId
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "This user already belongs to another company.",
-          },
-          { status: 400 }
-        );
-      }
-
-      // ==========================================================
-      // 8D. PROFILE EXISTS BUT HAS NO COMPANY
-      // ==========================================================
-
-      if (
-        !existingProfile.company_id
-      ) {
-        const {
-          error: updateError,
-        } = await supabaseAdmin
-          .from("profiles")
-          .update({
-            company_id: companyId,
-            role_id: role_id,
-            full_name:
-              full_name.trim() ||
-              existingProfile.full_name ||
-              null,
-            is_owner: false,
-          })
-          .eq(
-            "id",
-            existingAuthUser.id
-          );
-
-        if (updateError) {
-          console.error(
-            "PROFILE COMPANY UPDATE ERROR:",
-            updateError
-          );
-
-          return NextResponse.json(
-            {
-              error:
-                updateError.message,
-            },
-            { status: 400 }
-          );
-        }
-
-        // --------------------------------------------------------
-        // Record invitation
-        // --------------------------------------------------------
-
-        const {
-          error: invitationError,
-        } = await supabaseAdmin
-          .from("invitations")
-          .insert({
-            full_name:
-              full_name.trim(),
-            company_id: companyId,
-            email: normalizedEmail,
-            role_id: role_id,
-            invited_by: user.id,
-            status: "Accepted",
-          });
-
-        if (invitationError) {
-          console.error(
-            "INVITATION RECORD ERROR:",
-            invitationError
-          );
-        }
-
-        return NextResponse.json({
-          success: true,
-          existing_user: true,
-          message:
-            `${normalizedEmail} has been added to your company successfully.`,
-        });
-      }
-    }
-
-    // ============================================================
-    // 9. NEW USER
-    // ============================================================
-
-    console.log(
-      "NEW AUTH USER - CREATING INVITATION"
-    );
-
-    // ============================================================
-    // 10. CHECK EXISTING PENDING INVITATION
+    // 7. CHECK FOR EXISTING PENDING INVITATION
     // ============================================================
 
     const {
@@ -514,7 +194,9 @@ export async function POST(request: Request) {
     } =
       await supabaseAdmin
         .from("invitations")
-        .select("id, status")
+        .select(
+          "id, status, company_id, email"
+        )
         .eq(
           "company_id",
           companyId
@@ -555,7 +237,120 @@ export async function POST(request: Request) {
     }
 
     // ============================================================
-    // 11. CREATE INVITATION
+    // 8. CHECK WHETHER AUTH USER ALREADY EXISTS
+    // ============================================================
+    //
+    // IMPORTANT:
+    //
+    // We ONLY CHECK whether the user exists.
+    //
+    // We DO NOT create an Auth user.
+    //
+    // This is the key change for Option A.
+    // ============================================================
+
+    let existingAuthUser = null;
+
+    const {
+      data: authUsers,
+      error: authUsersError,
+    } =
+      await supabaseAdmin.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000,
+      });
+
+    if (authUsersError) {
+      console.error(
+        "AUTH USER LOOKUP ERROR:",
+        authUsersError
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Unable to check existing user accounts.",
+        },
+        { status: 500 }
+      );
+    }
+
+    existingAuthUser =
+      authUsers.users.find(
+        (authUser) =>
+          authUser.email?.toLowerCase() ===
+          normalizedEmail
+      ) || null;
+
+    // ============================================================
+    // 9. EXISTING USER ALREADY IN THIS COMPANY
+    // ============================================================
+
+    if (existingAuthUser) {
+      const {
+        data: existingProfile,
+        error: existingProfileError,
+      } =
+        await supabaseAdmin
+          .from("profiles")
+          .select(
+            "id, company_id, email, full_name, role_id, is_owner"
+          )
+          .eq(
+            "id",
+            existingAuthUser.id
+          )
+          .maybeSingle();
+
+      if (existingProfileError) {
+        console.error(
+          "EXISTING PROFILE ERROR:",
+          existingProfileError
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "Unable to check the existing user's company profile.",
+          },
+          { status: 500 }
+        );
+      }
+
+      if (
+        existingProfile?.company_id ===
+        companyId
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "This user is already a member of your company.",
+          },
+          { status: 400 }
+        );
+      }
+
+      // ----------------------------------------------------------
+      // User belongs to another company
+      // ----------------------------------------------------------
+
+      if (
+        existingProfile?.company_id &&
+        existingProfile.company_id !==
+          companyId
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "This user already belongs to another company.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // ============================================================
+    // 10. CREATE PENDING INVITATION
     // ============================================================
 
     const {
@@ -566,12 +361,17 @@ export async function POST(request: Request) {
         .from("invitations")
         .insert({
           full_name:
-            full_name.trim(),
-          company_id: companyId,
-          email: normalizedEmail,
-          role_id: role_id,
-          invited_by: user.id,
-          status: "Pending",
+            normalizedName,
+          company_id:
+            companyId,
+          email:
+            normalizedEmail,
+          role_id:
+            role_id,
+          invited_by:
+            user.id,
+          status:
+            "Pending",
         })
         .select()
         .single();
@@ -585,60 +385,88 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            inviteError.message,
+            inviteError.message ||
+            "Unable to create invitation.",
         },
         { status: 400 }
       );
     }
 
     // ============================================================
-    // 12. SEND SUPABASE INVITATION EMAIL
+    // 11. BUILD INVITATION URL
     // ============================================================
 
     const appUrl =
       process.env.NEXT_PUBLIC_SITE_URL ||
       "http://localhost:3000";
 
-    const redirectUrl =
-      `${appUrl}/auth/callback?next=/app/accept-invitation&invitation_id=${invitation.id}`;
+    const invitationUrl =
+      `${appUrl}/app/accept-invitation?invitation_id=${encodeURIComponent(
+        invitation.id
+      )}`;
 
     console.log(
-      "INVITATION REDIRECT:",
-      redirectUrl
+      "===================================="
     );
 
-    const {
-      data: invitedUser,
-      error: emailError,
-    } =
-      await supabaseAdmin.auth.admin.inviteUserByEmail(
-        normalizedEmail,
-        {
-          redirectTo:
-            redirectUrl,
+    console.log(
+      "INVITATION CREATED"
+    );
 
-          data: {
-            invitation_id:
-              invitation.id,
-            company_id:
-              companyId,
-            role_id:
-              role_id,
-            full_name:
-              full_name.trim(),
-          },
-        }
-      );
+    console.log(
+      "INVITATION ID:",
+      invitation.id
+    );
+
+    console.log(
+      "RECIPIENT:",
+      normalizedEmail
+    );
+
+    console.log(
+      "COMPANY:",
+      companyId
+    );
+
+    console.log(
+      "ROLE:",
+      role.name
+    );
+
+    console.log(
+      "INVITATION URL:",
+      invitationUrl
+    );
+
+    console.log(
+      "EXISTING AUTH USER:",
+      Boolean(existingAuthUser)
+    );
+
+    console.log(
+      "===================================="
+    );
 
     // ============================================================
-    // 13. EMAIL FAILED
+    // 12. CHECK EMAIL CONFIGURATION
     // ============================================================
 
-    if (emailError) {
+    const resendApiKey =
+      process.env.RESEND_API_KEY;
+
+    const fromEmail =
+      process.env.RESEND_FROM_EMAIL;
+
+    if (
+      !resendApiKey ||
+      !fromEmail
+    ) {
       console.error(
-        "SUPABASE INVITATION EMAIL ERROR:",
-        emailError
+        "EMAIL CONFIGURATION MISSING"
       );
+
+      // Remove invitation because we cannot
+      // complete the invitation process.
 
       await supabaseAdmin
         .from("invitations")
@@ -651,27 +479,261 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            emailError.message ||
-            "Invitation email could not be sent.",
+            "Invitation email service is not configured. Please configure RESEND_API_KEY and RESEND_FROM_EMAIL.",
         },
-        { status: 400 }
+        { status: 500 }
       );
     }
 
     // ============================================================
-    // 14. SUCCESS
+    // 13. SEND INVITATION EMAIL WITH RESEND
+    // ============================================================
+
+    const emailResponse =
+      await fetch(
+        "https://api.resend.com/emails",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            Authorization:
+              `Bearer ${resendApiKey}`,
+          },
+
+          body: JSON.stringify({
+            from:
+              fromEmail,
+
+            to: [
+              normalizedEmail,
+            ],
+
+            subject:
+              `You're invited to join ${role.name} on ConstructIQ`,
+
+            html: `
+<!DOCTYPE html>
+
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+
+<body style="margin:0; padding:0; background:#f3f4f6; font-family:Arial, Helvetica, sans-serif;">
+
+  <div style="max-width:600px; margin:40px auto; padding:20px;">
+
+    <div style="background:#ffffff; border-radius:16px; padding:40px; border:1px solid #e5e7eb;">
+
+      <div style="text-align:center; margin-bottom:30px;">
+
+        <div style="
+          width:64px;
+          height:64px;
+          margin:0 auto 16px;
+          background:#2563eb;
+          border-radius:16px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          font-size:30px;
+          line-height:64px;
+        ">
+          🏗️
+        </div>
+
+        <h1 style="
+          margin:0;
+          color:#111827;
+          font-size:28px;
+        ">
+          ConstructIQ
+        </h1>
+
+        <p style="
+          margin:8px 0 0;
+          color:#6b7280;
+          font-size:14px;
+        ">
+          Engineering Project Management Platform
+        </p>
+
+      </div>
+
+      <h2 style="
+        color:#111827;
+        font-size:22px;
+        margin-bottom:10px;
+      ">
+        You're invited to join ConstructIQ
+      </h2>
+
+      <p style="
+        color:#4b5563;
+        font-size:16px;
+        line-height:1.6;
+      ">
+        Hello ${escapeHtml(normalizedName)},
+      </p>
+
+      <p style="
+        color:#4b5563;
+        font-size:16px;
+        line-height:1.6;
+      ">
+        You have been invited to join a company on ConstructIQ as:
+      </p>
+
+      <div style="
+        background:#eff6ff;
+        border:1px solid #bfdbfe;
+        border-radius:12px;
+        padding:18px;
+        margin:24px 0;
+      ">
+
+        <p style="
+          margin:0 0 6px;
+          color:#6b7280;
+          font-size:13px;
+        ">
+          Your role
+        </p>
+
+        <p style="
+          margin:0;
+          color:#1d4ed8;
+          font-size:18px;
+          font-weight:bold;
+        ">
+          ${escapeHtml(role.name)}
+        </p>
+
+      </div>
+
+      <p style="
+        color:#4b5563;
+        font-size:16px;
+        line-height:1.6;
+      ">
+        Click the button below to accept your invitation and create or access your ConstructIQ account.
+      </p>
+
+      <div style="text-align:center; margin:32px 0;">
+
+        <a
+          href="${invitationUrl}"
+          style="
+            display:inline-block;
+            background:#2563eb;
+            color:#ffffff;
+            text-decoration:none;
+            padding:14px 28px;
+            border-radius:10px;
+            font-size:16px;
+            font-weight:bold;
+          "
+        >
+          Accept Invitation
+        </a>
+
+      </div>
+
+      <p style="
+        color:#9ca3af;
+        font-size:13px;
+        line-height:1.5;
+      ">
+        If you did not expect this invitation, you can safely ignore this email.
+      </p>
+
+      <hr style="
+        border:none;
+        border-top:1px solid #e5e7eb;
+        margin:30px 0;
+      " />
+
+      <p style="
+        color:#9ca3af;
+        font-size:12px;
+        text-align:center;
+        margin:0;
+      ">
+        © 2026 ConstructIQ
+      </p>
+
+    </div>
+
+  </div>
+
+</body>
+</html>
+            `,
+          }),
+        }
+      );
+
+    const emailResult =
+      await emailResponse.json();
+
+    // ============================================================
+    // 14. EMAIL FAILED
+    // ============================================================
+
+    if (!emailResponse.ok) {
+      console.error(
+        "RESEND EMAIL ERROR:",
+        emailResult
+      );
+
+      // Remove pending invitation if email
+      // could not be sent.
+
+      await supabaseAdmin
+        .from("invitations")
+        .delete()
+        .eq(
+          "id",
+          invitation.id
+        );
+
+      return NextResponse.json(
+        {
+          error:
+            emailResult?.message ||
+            emailResult?.error ||
+            "Invitation email could not be sent.",
+        },
+        { status: 500 }
+      );
+    }
+
+    // ============================================================
+    // 15. SUCCESS
     // ============================================================
 
     console.log(
-      "NEW USER INVITATION SENT:",
-      invitedUser?.user?.email
+      "INVITATION EMAIL SENT"
+    );
+
+    console.log(
+      "RESEND RESULT:",
+      emailResult
     );
 
     return NextResponse.json({
       success: true,
-      existing_user: false,
+
+      existing_user:
+        Boolean(existingAuthUser),
+
       message:
         `Invitation sent successfully to ${normalizedEmail}.`,
+
       invitation_id:
         invitation.id,
     });
@@ -694,4 +756,34 @@ export async function POST(request: Request) {
       }
     );
   }
+}
+
+// ============================================================
+// SIMPLE HTML ESCAPING
+// ============================================================
+
+function escapeHtml(
+  value: string
+): string {
+  return value
+    .replace(
+      /&/g,
+      "&amp;"
+    )
+    .replace(
+      /</g,
+      "&lt;"
+    )
+    .replace(
+      />/g,
+      "&gt;"
+    )
+    .replace(
+      /"/g,
+      "&quot;"
+    )
+    .replace(
+      /'/g,
+      "&#039;"
+    );
 }

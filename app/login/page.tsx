@@ -13,6 +13,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  // ============================================================
+  // Get invitation ID from URL
+  // ============================================================
+
   function getInvitationId() {
     if (typeof window === "undefined") {
       return null;
@@ -23,6 +27,10 @@ export default function LoginPage() {
     ).get("invitation_id");
   }
 
+  // ============================================================
+  // Login
+  // ============================================================
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
 
@@ -30,6 +38,11 @@ export default function LoginPage() {
     setErrorMessage("");
 
     try {
+      // --------------------------------------------------------
+      // IMPORTANT:
+      // Capture invitation ID BEFORE authentication.
+      // --------------------------------------------------------
+
       const invitationId = getInvitationId();
 
       const {
@@ -42,6 +55,11 @@ export default function LoginPage() {
 
       console.log("LOGIN DATA:", data);
       console.log("LOGIN ERROR:", error);
+      console.log("INVITATION ID:", invitationId);
+
+      // --------------------------------------------------------
+      // Login failed
+      // --------------------------------------------------------
 
       if (error) {
         setErrorMessage(error.message);
@@ -55,14 +73,22 @@ export default function LoginPage() {
         return;
       }
 
-      // ------------------------------------------------
+      // ========================================================
       // INVITED USER
-      // ------------------------------------------------
-      // Do NOT check company_id first.
-      // The invitation API will assign the company.
-      // ------------------------------------------------
+      // ========================================================
+      //
+      // IMPORTANT:
+      // Do NOT check company_id here.
+      //
+      // The accept-invitation API will connect the user
+      // to the invited company and assign the role.
+      // ========================================================
 
       if (invitationId) {
+        console.log(
+          "INVITED USER LOGIN - ACCEPTING INVITATION"
+        );
+
         router.replace(
           `/app/accept-invitation?invitation_id=${encodeURIComponent(
             invitationId
@@ -70,12 +96,13 @@ export default function LoginPage() {
         );
 
         router.refresh();
+
         return;
       }
 
-      // ------------------------------------------------
+      // ========================================================
       // NORMAL LOGIN
-      // ------------------------------------------------
+      // ========================================================
 
       const {
         data: profile,
@@ -93,16 +120,27 @@ export default function LoginPage() {
         );
       }
 
+      // --------------------------------------------------------
+      // User has no company
+      // --------------------------------------------------------
+
       if (!profile?.company_id) {
         router.replace("/create-company");
         return;
       }
 
+      // --------------------------------------------------------
+      // Normal company user
+      // --------------------------------------------------------
+
       router.replace("/app/dashboard");
       router.refresh();
 
     } catch (err) {
-      console.error("LOGIN ERROR:", err);
+      console.error(
+        "LOGIN ERROR:",
+        err
+      );
 
       setErrorMessage(
         "Something went wrong. Please try again."
@@ -112,12 +150,78 @@ export default function LoginPage() {
     }
   }
 
+  // ============================================================
+  // Create Account
+  // ============================================================
+
+  function handleCreateAccount() {
+    const invitationId = getInvitationId();
+
+    console.log(
+      "CREATE ACCOUNT - INVITATION ID:",
+      invitationId
+    );
+
+    // ----------------------------------------------------------
+    // If this login page was opened from an invitation,
+    // preserve the invitation ID when moving to signup.
+    // ----------------------------------------------------------
+
+    if (invitationId) {
+      router.push(
+        `/signup?invitation_id=${encodeURIComponent(
+          invitationId
+        )}`
+      );
+
+      return;
+    }
+
+    // ----------------------------------------------------------
+    // Normal signup
+    // ----------------------------------------------------------
+
+    router.push("/signup");
+  }
+
+  // ============================================================
+  // Forgot Password
+  // ============================================================
+
+  function handleForgotPassword() {
+    const invitationId = getInvitationId();
+
+    console.log(
+      "FORGOT PASSWORD - INVITATION ID:",
+      invitationId
+    );
+
+    if (invitationId) {
+      router.push(
+        `/forgot-password?invitation_id=${encodeURIComponent(
+          invitationId
+        )}`
+      );
+
+      return;
+    }
+
+    router.push("/forgot-password");
+  }
+
+  // ============================================================
+  // UI
+  // ============================================================
+
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
 
       <div className="w-full max-w-md">
 
-        {/* Logo */}
+        {/* ====================================================
+            Logo
+        ==================================================== */}
+
         <div className="text-center mb-8">
 
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-3xl shadow-lg">
@@ -134,7 +238,10 @@ export default function LoginPage() {
 
         </div>
 
-        {/* Card */}
+        {/* ====================================================
+            Card
+        ==================================================== */}
+
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
 
           <div className="mb-7">
@@ -149,12 +256,17 @@ export default function LoginPage() {
 
           </div>
 
+          {/* ==================================================
+              Login Form
+          ================================================== */}
+
           <form
             onSubmit={handleLogin}
             className="space-y-5"
           >
 
             {/* Email */}
+
             <div>
 
               <label
@@ -180,6 +292,7 @@ export default function LoginPage() {
             </div>
 
             {/* Password */}
+
             <div>
 
               <div className="flex justify-between items-center mb-2">
@@ -193,22 +306,7 @@ export default function LoginPage() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    const invitationId =
-                      getInvitationId();
-
-                    if (invitationId) {
-                      router.push(
-                        `/forgot-password?invitation_id=${encodeURIComponent(
-                          invitationId
-                        )}`
-                      );
-                    } else {
-                      router.push(
-                        "/forgot-password"
-                      );
-                    }
-                  }}
+                  onClick={handleForgotPassword}
                   className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
                 >
                   Forgot password?
@@ -238,7 +336,9 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    setShowPassword(!showPassword)
+                    setShowPassword(
+                      !showPassword
+                    )
                   }
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 hover:text-gray-800"
                 >
@@ -251,14 +351,22 @@ export default function LoginPage() {
 
             </div>
 
-            {/* Error */}
+            {/* ==================================================
+                Error
+            ================================================== */}
+
             {errorMessage && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+
                 {errorMessage}
+
               </div>
             )}
 
-            {/* Sign In */}
+            {/* ==================================================
+                Sign In
+            ================================================== */}
+
             <button
               type="submit"
               disabled={loading}
@@ -271,7 +379,12 @@ export default function LoginPage() {
 
           </form>
 
+          {/* ==================================================
+              Signup Divider
+          ================================================== */}
+
           <div className="flex items-center gap-3 my-7">
+
             <div className="h-px flex-1 bg-gray-200" />
 
             <span className="text-sm text-gray-400">
@@ -279,19 +392,26 @@ export default function LoginPage() {
             </span>
 
             <div className="h-px flex-1 bg-gray-200" />
+
           </div>
+
+          {/* ==================================================
+              Create Account
+          ================================================== */}
 
           <button
             type="button"
-            onClick={() =>
-              router.push("/signup")
-            }
+            onClick={handleCreateAccount}
             className="w-full rounded-lg border border-blue-600 bg-white px-4 py-3 font-semibold text-blue-600 transition hover:bg-blue-50"
           >
             Create Account
           </button>
 
         </div>
+
+        {/* ====================================================
+            Footer
+        ==================================================== */}
 
         <p className="text-center text-sm text-gray-400 mt-6">
           © 2026 ConstructIQ
