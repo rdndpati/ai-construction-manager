@@ -10,6 +10,19 @@ type Props = {
   }>;
 };
 
+type Profile = {
+  company_id: string | null;
+  is_owner: boolean | null; 
+  roles:
+    | {
+        name: string;
+      }
+    | {
+        name: string;
+      }[]
+    | null;
+};
+
 export default async function ProjectDrawings({
   params,
 }: Props) {
@@ -18,7 +31,7 @@ export default async function ProjectDrawings({
   const supabase = await createClient();
 
   /* =========================================================
-     GET LOGGED-IN USER
+     1. GET LOGGED-IN USER
   ========================================================= */
 
   const {
@@ -30,7 +43,7 @@ export default async function ProjectDrawings({
   }
 
   /* =========================================================
-     GET USER COMPANY
+     2. GET USER PROFILE + ROLE
   ========================================================= */
 
   const {
@@ -38,19 +51,51 @@ export default async function ProjectDrawings({
     error: profileError,
   } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select(`
+      company_id,
+      is_owner,
+      roles (
+        name
+      )
+    `)
     .eq("id", user.id)
     .single();
 
   if (
     profileError ||
-    !profile?.company_id
+    !profile ||
+    !profile.company_id
   ) {
     redirect("/create-company");
   }
 
+  const typedProfile = profile as unknown as Profile;
+
   /* =========================================================
-     GET PROJECT
+     3. DETERMINE USER ROLE
+  ========================================================= */
+
+  const roleData = typedProfile.roles;
+
+  const roleName = Array.isArray(roleData)
+    ? roleData[0]?.name
+    : roleData?.name;
+
+  const isOwner =
+    typedProfile.is_owner === true;
+
+  const isAdmin =
+    roleName === "Admin";
+
+  const isCompanyManager =
+    isOwner || isAdmin;
+
+  /* =========================================================
+     4. GET PROJECT
+     
+     IMPORTANT:
+     First verify that the project belongs to
+     the user's company.
   ========================================================= */
 
   const {
@@ -62,7 +107,7 @@ export default async function ProjectDrawings({
     .eq("id", id)
     .eq(
       "company_id",
-      profile.company_id
+      typedProfile.company_id
     )
     .single();
 
@@ -72,7 +117,6 @@ export default async function ProjectDrawings({
   ) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
-
         <div className="max-w-7xl mx-auto">
 
           <div className="
@@ -119,13 +163,151 @@ export default async function ProjectDrawings({
           </div>
 
         </div>
-
       </main>
     );
   }
 
   /* =========================================================
-     GET DRAWINGS
+     5. PROJECT ACCESS CHECK
+     
+     OWNER / ADMIN:
+     Company-wide project access.
+
+     EMPLOYEE:
+     Must exist in project_members.
+  ========================================================= */
+
+  if (!isCompanyManager) {
+
+    const {
+      data: membership,
+      error: membershipError,
+    } = await supabase
+      .from("project_members")
+      .select(`
+        id,
+        project_id,
+        profile_id,
+        role
+      `)
+      .eq("project_id", id)
+      .eq("profile_id", user.id)
+      .maybeSingle();
+
+    console.log(
+      "PROJECT ACCESS CHECK:",
+      {
+        userId: user.id,
+        projectId: id,
+        membership,
+        membershipError,
+      }
+    );
+
+    if (
+      membershipError ||
+      !membership
+    ) {
+      return (
+        <main className="
+          min-h-screen
+          bg-gray-50
+          p-8
+        ">
+
+          <div className="
+            max-w-3xl
+            mx-auto
+          ">
+
+            <div className="
+              bg-white
+              border
+              border-red-200
+              rounded-2xl
+              p-10
+              text-center
+              shadow-sm
+            ">
+
+              <div className="text-6xl mb-5">
+                🔒
+              </div>
+
+              <h1 className="
+                text-3xl
+                font-bold
+                text-gray-900
+              ">
+                Project Access Restricted
+              </h1>
+
+              <p className="
+                text-gray-500
+                mt-3
+                max-w-xl
+                mx-auto
+              ">
+                You are not assigned to this project.
+                Please contact your company administrator
+                if you need access.
+              </p>
+
+              <div className="
+                flex
+                flex-col
+                sm:flex-row
+                justify-center
+                gap-3
+                mt-7
+              ">
+
+                <Link
+                  href="/app/projects"
+                  className="
+                    bg-blue-600
+                    hover:bg-blue-700
+                    text-white
+                    px-6
+                    py-3
+                    rounded-lg
+                    font-semibold
+                  "
+                >
+                  ← My Projects
+                </Link>
+
+                <Link
+                  href="/app/dashboard"
+                  className="
+                    border
+                    border-gray-300
+                    hover:bg-gray-50
+                    text-gray-700
+                    px-6
+                    py-3
+                    rounded-lg
+                    font-semibold
+                  "
+                >
+                  Dashboard
+                </Link>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </main>
+      );
+    }
+  }
+
+  /* =========================================================
+     6. GET DRAWINGS
+     
+     This happens ONLY after project access is confirmed.
   ========================================================= */
 
   const {
@@ -141,9 +323,16 @@ export default async function ProjectDrawings({
 
   if (drawingsError) {
     return (
-      <main className="min-h-screen bg-gray-50 p-8">
+      <main className="
+        min-h-screen
+        bg-gray-50
+        p-8
+      ">
 
-        <div className="max-w-7xl mx-auto">
+        <div className="
+          max-w-7xl
+          mx-auto
+        ">
 
           <div className="
             bg-white
@@ -189,7 +378,7 @@ export default async function ProjectDrawings({
   }
 
   /* =========================================================
-     SUMMARY
+     7. SUMMARY
   ========================================================= */
 
   const drawingList =
@@ -225,6 +414,10 @@ export default async function ProjectDrawings({
         "90%",
       ].includes(drawing.status)
     ).length;
+
+  /* =========================================================
+     8. PAGE
+  ========================================================= */
 
   return (
     <main className="
@@ -345,11 +538,13 @@ export default async function ProjectDrawings({
               transition
             "
           >
+
             <span className="text-lg">
               ＋
             </span>
 
             Upload Drawings
+
           </Link>
 
         </div>
@@ -359,7 +554,11 @@ export default async function ProjectDrawings({
         ================================================= */}
 
         <div className="mt-7">
-          <ProjectTabs projectId={id} />
+
+          <ProjectTabs
+            projectId={id}
+          />
+
         </div>
 
         {/* =================================================

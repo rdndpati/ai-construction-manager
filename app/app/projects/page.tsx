@@ -7,10 +7,6 @@ import ProjectsClient from "@/components/ProjectsClient";
 export default async function ProjectsPage() {
   const supabase = await createClient();
 
-  console.log("====================================");
-  console.log("PROJECTS PAGE");
-  console.log("====================================");
-
   // ============================================
   // 1. GET LOGGED-IN USER
   // ============================================
@@ -19,15 +15,6 @@ export default async function ProjectsPage() {
     data: { user },
     error: userError,
   } = await supabase.auth.getUser();
-
-  console.log("AUTH CHECK");
-  console.log("USER ID:", user?.id);
-  console.log("USER EMAIL:", user?.email);
-  console.log("USER ERROR:", userError);
-
-  // ============================================
-  // USER NOT LOGGED IN
-  // ============================================
 
   if (userError || !user) {
     return (
@@ -56,30 +43,19 @@ export default async function ProjectsPage() {
   // 2. GET USER PROFILE
   // ============================================
 
-  const {
-  data: profile,
-  error: profileError,
-} = await supabase
-  .from("profiles")
-  .select(`
-    company_id,
-    role_id,
-    is_owner
-  `)
-  .eq("id", user.id)
-  .single();
-
-  console.log("====================================");
-  console.log("PROFILE CHECK");
-  console.log("PROFILE:", profile);
-  console.log("PROFILE ERROR:", profileError);
-  console.log("====================================");
-
-  // ============================================
-  // PROFILE ERROR
-  // ============================================
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select(`
+      company_id,
+      role_id,
+      is_owner
+    `)
+    .eq("id", user.id)
+    .single();
 
   if (profileError) {
+    console.error("PROFILE ERROR:", profileError);
+
     return (
       <main className="p-8">
         <div className="max-w-xl mx-auto text-center mt-20">
@@ -87,12 +63,12 @@ export default async function ProjectsPage() {
             Profile Error
           </h1>
 
-          <pre className="mt-4 bg-white p-4 rounded-lg overflow-auto text-left">
-            {JSON.stringify(
-              profileError,
-              null,
-              2
-            )}
+          <p className="mt-2 text-gray-600">
+            Unable to load your profile.
+          </p>
+
+          <pre className="mt-4 bg-white p-4 rounded-lg overflow-auto text-left text-sm">
+            {JSON.stringify(profileError, null, 2)}
           </pre>
         </div>
       </main>
@@ -132,54 +108,45 @@ export default async function ProjectsPage() {
   // 4. DETERMINE USER ROLE
   // ============================================
 
-  // ============================================
-// 4. DETERMINE USER ROLE
-// ============================================
+  let roleName = "";
 
-let roleName = "";
+  if (profile.role_id) {
+    const { data: role, error: roleError } = await supabase
+      .from("roles")
+      .select("name")
+      .eq("id", profile.role_id)
+      .maybeSingle();
 
-if (profile.role_id) {
-  const {
-    data: role,
-    error: roleError,
-  } = await supabase
-    .from("roles")
-    .select("name")
-    .eq("id", profile.role_id)
-    .maybeSingle();
+    if (roleError) {
+      console.error("ROLE ERROR:", roleError);
+    }
 
-  console.log("ROLE:", role);
-  console.log("ROLE ERROR:", roleError);
+    roleName = role?.name?.trim() || "";
+  }
 
-  roleName = role?.name || "";
-}
+  const normalizedRole = roleName.toLowerCase();
 
-const isOwner = profile.is_owner === true;
+  const isOwner = profile.is_owner === true;
 
-const isAdmin = roleName === "Admin";
+  const isAdmin =
+    normalizedRole === "admin" ||
+    normalizedRole === "administrator";
 
-const hasFullProjectAccess =
-  isAdmin || isOwner;
-
-console.log("====================================");
-console.log("ACCESS CHECK");
-console.log("ROLE:", roleName);
-console.log("ROLE ID:", profile.role_id);
-console.log("IS OWNER:", isOwner);
-console.log("IS ADMIN:", isAdmin);
-console.log(
-  "FULL PROJECT ACCESS:",
-  hasFullProjectAccess
-);
-console.log("COMPANY:", companyId);
-console.log("====================================");
+  // Owner OR Admin gets full company project access
+  const hasFullProjectAccess = isOwner || isAdmin;
 
   console.log("====================================");
-  console.log("ACCESS CHECK");
+  console.log("PROJECT ACCESS CHECK");
+  console.log("USER:", user.email);
+  console.log("USER ID:", user.id);
+  console.log("COMPANY:", companyId);
   console.log("ROLE:", roleName);
   console.log("IS OWNER:", isOwner);
   console.log("IS ADMIN:", isAdmin);
-  console.log("COMPANY:", companyId);
+  console.log(
+    "FULL PROJECT ACCESS:",
+    hasFullProjectAccess
+  );
   console.log("====================================");
 
   // ============================================
@@ -189,23 +156,17 @@ console.log("====================================");
   let projects: any[] = [];
 
   // ============================================
-  // ADMIN / OWNER
+  // OWNER / ADMIN
   // ============================================
   //
-  // Admins and company owners can see
-  // every project belonging to the company.
+  // Company owners and admins can see
+  // ALL active projects belonging to
+  // THEIR company only.
   //
   // ============================================
 
   if (hasFullProjectAccess) {
-    console.log(
-      "ADMIN /Owner ACCESS: Loading all company projects"
-    );
-
-    const {
-      data,
-      error: projectError,
-    } = await supabase
+    const { data, error: projectError } = await supabase
       .from("projects")
       .select("*")
       .eq("company_id", companyId)
@@ -214,13 +175,9 @@ console.log("====================================");
         ascending: false,
       });
 
-    console.log("ADMIN PROJECTS:", data);
-    console.log(
-      "ADMIN PROJECT ERROR:",
-      projectError
-    );
-
     if (projectError) {
+      console.error("PROJECT ERROR:", projectError);
+
       return (
         <main className="p-8">
           <div className="max-w-xl mx-auto text-center mt-20">
@@ -228,12 +185,12 @@ console.log("====================================");
               Error Loading Projects
             </h1>
 
-            <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left">
-              {JSON.stringify(
-                projectError,
-                null,
-                2
-              )}
+            <p className="mt-2 text-gray-600">
+              We could not load your company projects.
+            </p>
+
+            <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left text-sm">
+              {JSON.stringify(projectError, null, 2)}
             </pre>
           </div>
         </main>
@@ -244,23 +201,15 @@ console.log("====================================");
   }
 
   // ============================================
-  // NORMAL EMPLOYEE
+  // REGULAR EMPLOYEE
   // ============================================
   //
   // Employees can ONLY see projects assigned
-  // to them through project_members.
+  // to their profile through project_members.
   //
   // ============================================
 
   else {
-    console.log(
-      "EMPLOYEE ACCESS: Loading assigned projects only"
-    );
-
-    // --------------------------------------------
-    // Get project assignments
-    // --------------------------------------------
-
     const {
       data: assignments,
       error: assignmentError,
@@ -269,17 +218,12 @@ console.log("====================================");
       .select("project_id")
       .eq("profile_id", user.id);
 
-    console.log(
-      "PROJECT ASSIGNMENTS:",
-      assignments
-    );
-
-    console.log(
-      "ASSIGNMENT ERROR:",
-      assignmentError
-    );
-
     if (assignmentError) {
+      console.error(
+        "PROJECT ASSIGNMENT ERROR:",
+        assignmentError
+      );
+
       return (
         <main className="p-8">
           <div className="max-w-xl mx-auto text-center mt-20">
@@ -287,7 +231,11 @@ console.log("====================================");
               Error Loading Project Access
             </h1>
 
-            <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left">
+            <p className="mt-2 text-gray-600">
+              We could not determine your project assignments.
+            </p>
+
+            <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left text-sm">
               {JSON.stringify(
                 assignmentError,
                 null,
@@ -299,33 +247,17 @@ console.log("====================================");
       );
     }
 
-    // --------------------------------------------
-    // Get project IDs
-    // --------------------------------------------
-
     const projectIds =
       assignments?.map(
-        (assignment) =>
-          assignment.project_id
+        (assignment) => assignment.project_id
       ) || [];
 
-    console.log(
-      "ASSIGNED PROJECT IDS:",
-      projectIds
-    );
-
-    // --------------------------------------------
-    // No projects assigned
-    // --------------------------------------------
-
+    // No assignments
     if (projectIds.length === 0) {
       projects = [];
     }
 
-    // --------------------------------------------
-    // Load ONLY assigned projects
-    // --------------------------------------------
-
+    // Load only assigned projects
     else {
       const {
         data,
@@ -340,17 +272,12 @@ console.log("====================================");
           ascending: false,
         });
 
-      console.log(
-        "EMPLOYEE PROJECTS:",
-        data
-      );
-
-      console.log(
-        "EMPLOYEE PROJECT ERROR:",
-        projectError
-      );
-
       if (projectError) {
+        console.error(
+          "EMPLOYEE PROJECT ERROR:",
+          projectError
+        );
+
         return (
           <main className="p-8">
             <div className="max-w-xl mx-auto text-center mt-20">
@@ -358,7 +285,7 @@ console.log("====================================");
                 Error Loading Projects
               </h1>
 
-              <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left">
+              <pre className="mt-6 bg-white p-4 rounded-lg overflow-auto text-left text-sm">
                 {JSON.stringify(
                   projectError,
                   null,
@@ -373,26 +300,6 @@ console.log("====================================");
       projects = data || [];
     }
   }
-
-  // ============================================
-  // FINAL LOG
-  // ============================================
-
-  console.log("====================================");
-  console.log("FINAL PROJECT LIST");
-  console.log("USER:", user.email);
-  console.log("ROLE:", roleName);
-  console.log("IS ADMIN:", isAdmin);
-  console.log("PROJECT COUNT:", projects.length);
-  console.log(
-    "PROJECTS:",
-    projects.map((project) => ({
-      id: project.id,
-      name: project.name,
-      company_id: project.company_id,
-    }))
-  );
-  console.log("====================================");
 
   // ============================================
   // PAGE
@@ -413,7 +320,7 @@ console.log("====================================");
           </h1>
 
           <p className="text-gray-500 mt-1">
-            {isAdmin
+            {hasFullProjectAccess
               ? "All projects for your company"
               : "Projects assigned to you"}
           </p>
@@ -421,49 +328,88 @@ console.log("====================================");
 
         <div className="flex items-center gap-3">
 
-          {/* Only Admin / Owner can create projects */}
+          {/* ==================================== */}
+          {/* NEW PROJECT */}
+          {/* ==================================== */}
+          {/*
+            Only company Owner or Admin can
+            create projects.
+          */}
 
-          {isAdmin && (
+          {hasFullProjectAccess && (
             <NewProjectDialog />
           )}
 
+          {/* ==================================== */}
+          {/* DASHBOARD */}
+          {/* ==================================== */}
+
           <Link
             href="/app/dashboard"
-            className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700"
+            className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition"
           >
             Dashboard
           </Link>
 
         </div>
-
       </div>
 
       {/* ======================================== */}
-      {/* EMPLOYEE INFORMATION */}
+      {/* EMPLOYEE EMPTY STATE */}
       {/* ======================================== */}
 
-      {!isAdmin && projects.length === 0 && (
-        <div className="bg-white rounded-xl shadow p-10 text-center">
+      {!hasFullProjectAccess &&
+        projects.length === 0 && (
+          <div className="bg-white rounded-xl shadow p-10 text-center">
 
-          <div className="text-5xl mb-4">
-            📁
+            <div className="text-5xl mb-4">
+              📁
+            </div>
+
+            <h2 className="text-2xl font-bold text-gray-900">
+              No Projects Assigned
+            </h2>
+
+            <p className="text-gray-500 mt-2 max-w-md mx-auto">
+              You currently don't have access to any
+              projects. Please contact your company
+              administrator.
+            </p>
+
           </div>
-
-          <h2 className="text-2xl font-bold text-gray-900">
-            No Projects Assigned
-          </h2>
-
-          <p className="text-gray-500 mt-2">
-            You currently don't have access to any
-            projects. Please contact your company
-            administrator.
-          </p>
-
-        </div>
-      )}
+        )}
 
       {/* ======================================== */}
-      {/* PROJECTS */}
+      {/* OWNER / ADMIN EMPTY STATE */}
+      {/* ======================================== */}
+
+      {hasFullProjectAccess &&
+        projects.length === 0 && (
+          <div className="bg-white rounded-xl shadow p-10 text-center">
+
+            <div className="text-5xl mb-4">
+              📁
+            </div>
+
+            <h2 className="text-2xl font-bold text-gray-900">
+              No Projects Yet
+            </h2>
+
+            <p className="text-gray-500 mt-2">
+              Your company does not have any active
+              projects yet.
+            </p>
+
+            <p className="text-blue-600 mt-3 font-medium">
+              Use the "+ New Project" button above
+              to create your first project.
+            </p>
+
+          </div>
+        )}
+
+      {/* ======================================== */}
+      {/* PROJECT LIST */}
       {/* ======================================== */}
 
       {projects.length > 0 && (
