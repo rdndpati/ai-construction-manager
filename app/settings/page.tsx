@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Settings = {
   companyName: string;
   companyEmail: string;
+  companyAddress: string;
   phone: string;
   website: string;
 
@@ -26,8 +28,9 @@ type Settings = {
 };
 
 const defaultSettings: Settings = {
-  companyName: "AI Construction Manager",
+  companyName: "",
   companyEmail: "",
+  companyAddress: "",
   phone: "",
   website: "",
 
@@ -48,63 +51,378 @@ const defaultSettings: Settings = {
 };
 
 export default function SettingsPage() {
+  const router = useRouter();
+
   const [activeSection, setActiveSection] =
     useState("company");
 
   const [settings, setSettings] =
     useState<Settings>(defaultSettings);
 
-  const [saving, setSaving] = useState(false);
-
-  const [message, setMessage] = useState("");
-
   const [userEmail, setUserEmail] =
     useState("");
 
-  // =====================================================
+  const [companyId, setCompanyId] =
+    useState<string | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [message, setMessage] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const [canEditCompany, setCanEditCompany] =
+    useState(false);
+
+  // =========================================================
   // LOAD SETTINGS
-  // =====================================================
+  // =========================================================
 
   useEffect(() => {
     loadSettings();
   }, []);
 
   async function loadSettings() {
+    setLoading(true);
+    setError("");
+
     try {
+      // -------------------------------------------------------
+      // Get logged-in user
+      // -------------------------------------------------------
+
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
 
-      if (user?.email) {
-        setUserEmail(user.email);
+      if (userError || !user) {
+        router.replace("/login");
+        return;
       }
 
-      const saved =
-        localStorage.getItem(
-          "construction-manager-settings"
+      setUserEmail(user.email ?? "");
+
+      // -------------------------------------------------------
+      // Get profile
+      // -------------------------------------------------------
+
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("profiles")
+          .select(
+            `
+              id,
+              company_id,
+              is_owner,
+              roles (
+                name
+              )
+            `
+          )
+          .eq("id", user.id)
+          .single();
+
+      if (profileError) {
+        console.error(
+          "PROFILE LOAD ERROR:",
+          profileError
         );
 
-      if (saved) {
-        setSettings({
-          ...defaultSettings,
-          ...JSON.parse(saved),
-        });
+        setError(
+          "Unable to load your company profile."
+        );
+
+        return;
       }
-    } catch (error) {
-      console.error(
-        "Failed to load settings:",
-        error
+
+      if (!profile?.company_id) {
+        router.replace("/create-company");
+        return;
+      }
+
+      setCompanyId(profile.company_id);
+
+      // -------------------------------------------------------
+      // Determine role
+      // -------------------------------------------------------
+
+      const roleData = profile.roles as unknown as
+        | { name: string }
+        | { name: string }[]
+        | null;
+
+      const roleName = Array.isArray(roleData)
+        ? roleData[0]?.name
+        : roleData?.name;
+
+      const isOwner =
+        profile.is_owner === true;
+
+      const isAdmin =
+        roleName === "Admin";
+
+      setCanEditCompany(
+        isOwner || isAdmin
       );
+
+      // -------------------------------------------------------
+      // Get company from Supabase
+      // -------------------------------------------------------
+
+      const {
+        data: company,
+        error: companyError,
+      } = await supabase
+        .from("companies")
+        .select(
+          "id, name, address, phone, website"
+        )
+        .eq("id", profile.company_id)
+        .single();
+
+      if (companyError) {
+        console.error(
+          "COMPANY LOAD ERROR:",
+          companyError
+        );
+
+        setError(
+          companyError.message ||
+            "Unable to load company information."
+        );
+
+        return;
+      }
+
+      if (!company) {
+        setError(
+          "Company information could not be found."
+        );
+
+        return;
+      }
+
+      // -------------------------------------------------------
+      // Load saved preferences from localStorage
+      // -------------------------------------------------------
+
+      let savedPreferences: Partial<Settings> = {};
+
+      try {
+        const saved =
+          localStorage.getItem(
+            "construction-manager-settings"
+          );
+
+        if (saved) {
+          savedPreferences =
+            JSON.parse(saved);
+        }
+      } catch (storageError) {
+        console.error(
+          "LOCAL STORAGE ERROR:",
+          storageError
+        );
+      }
+
+      // -------------------------------------------------------
+      // IMPORTANT:
+      // Company information comes from Supabase.
+      // Preferences come from localStorage.
+      // -------------------------------------------------------
+
+      setSettings({
+        ...defaultSettings,
+
+        ...savedPreferences,
+
+        companyName:
+          company.name ?? "",
+
+        companyAddress:
+          company.address ?? "",
+
+        phone:
+          company.phone ?? "",
+
+        website:
+          company.website ?? "",
+
+        // Company email is not being read from
+        // companies table because your Create Company
+        // code does not save a company email column.
+        companyEmail:
+          savedPreferences.companyEmail ??
+          user.email ??
+          "",
+      });
+    } catch (err) {
+      console.error(
+        "SETTINGS LOAD ERROR:",
+        err
+      );
+
+      setError(
+        "Unable to load settings."
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
-  // =====================================================
-  // SAVE SETTINGS
-  // =====================================================
+  // =========================================================
+  // SAVE COMPANY PROFILE
+  // =========================================================
 
-  async function saveSettings() {
+  async function saveCompanyProfile() {
+    if (!companyId) {
+      setError(
+        "Company information is not available."
+      );
+
+      return;
+    }
+
+    if (!canEditCompany) {
+      setError(
+        "You do not have permission to edit the company profile."
+      );
+
+      return;
+    }
+
     setSaving(true);
     setMessage("");
+    setError("");
+
+    try {
+      const {
+        error: updateError,
+      } = await supabase
+        .from("companies")
+        .update({
+          name: settings.companyName.trim(),
+          address:
+            settings.companyAddress.trim(),
+          phone: settings.phone.trim(),
+          website: settings.website.trim(),
+        })
+        .eq("id", companyId);
+
+      if (updateError) {
+        console.error(
+          "COMPANY UPDATE ERROR:",
+          updateError
+        );
+
+        setError(
+          updateError.message ||
+            "Unable to save company profile."
+        );
+
+        return;
+      }
+
+      // Save company email locally because the current
+      // companies table/code does not contain a company_email field.
+      try {
+        localStorage.setItem(
+          "construction-manager-settings",
+          JSON.stringify(settings)
+        );
+      } catch (storageError) {
+        console.error(
+          "LOCAL STORAGE ERROR:",
+          storageError
+        );
+      }
+
+      setMessage(
+        "Company profile saved successfully."
+      );
+
+      // Reload from Supabase so the screen reflects
+      // the actual saved database values.
+      await loadCompanyOnly();
+
+      setTimeout(() => {
+        setMessage("");
+      }, 4000);
+    } catch (err) {
+      console.error(
+        "SAVE COMPANY ERROR:",
+        err
+      );
+
+      setError(
+        "Something went wrong while saving the company profile."
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // =========================================================
+  // RELOAD COMPANY ONLY
+  // =========================================================
+
+  async function loadCompanyOnly() {
+    if (!companyId) return;
+
+    const {
+      data: company,
+      error: companyError,
+    } = await supabase
+      .from("companies")
+      .select(
+        "id, name, address, phone, website"
+      )
+      .eq("id", companyId)
+      .single();
+
+    if (companyError) {
+      console.error(
+        "RELOAD COMPANY ERROR:",
+        companyError
+      );
+
+      return;
+    }
+
+    if (!company) return;
+
+    setSettings((previous) => ({
+      ...previous,
+
+      companyName:
+        company.name ?? "",
+
+      companyAddress:
+        company.address ?? "",
+
+      phone:
+        company.phone ?? "",
+
+      website:
+        company.website ?? "",
+    }));
+  }
+
+  // =========================================================
+  // SAVE OTHER SETTINGS
+  // =========================================================
+
+  function savePreferences() {
+    setSaving(true);
+    setMessage("");
+    setError("");
 
     try {
       localStorage.setItem(
@@ -119,10 +437,13 @@ export default function SettingsPage() {
       setTimeout(() => {
         setMessage("");
       }, 3000);
-    } catch (error) {
-      console.error(error);
+    } catch (err) {
+      console.error(
+        "SAVE SETTINGS ERROR:",
+        err
+      );
 
-      setMessage(
+      setError(
         "Unable to save settings."
       );
     } finally {
@@ -130,9 +451,9 @@ export default function SettingsPage() {
     }
   }
 
-  // =====================================================
+  // =========================================================
   // UPDATE SETTING
-  // =====================================================
+  // =========================================================
 
   function updateSetting<K extends keyof Settings>(
     key: K,
@@ -144,9 +465,9 @@ export default function SettingsPage() {
     }));
   }
 
-  // =====================================================
+  // =========================================================
   // LOGOUT
-  // =====================================================
+  // =========================================================
 
   async function handleLogout() {
     const confirmed = window.confirm(
@@ -160,9 +481,9 @@ export default function SettingsPage() {
     window.location.href = "/login";
   }
 
-  // =====================================================
+  // =========================================================
   // RESET PREFERENCES
-  // =====================================================
+  // =========================================================
 
   function resetPreferences() {
     const confirmed = window.confirm(
@@ -206,9 +527,9 @@ export default function SettingsPage() {
     }, 3000);
   }
 
-  // =====================================================
+  // =========================================================
   // SIDEBAR
-  // =====================================================
+  // =========================================================
 
   const menuItems = [
     {
@@ -247,6 +568,30 @@ export default function SettingsPage() {
       icon: "💾",
     },
   ];
+
+  // =========================================================
+  // LOADING SCREEN
+  // =========================================================
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-sm border p-8 text-center">
+          <div className="text-3xl mb-3">
+            ⚙️
+          </div>
+
+          <p className="text-gray-600">
+            Loading your company settings...
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // =========================================================
+  // PAGE
+  // =========================================================
 
   return (
     <main className="min-h-screen bg-gray-100">
@@ -302,9 +647,12 @@ export default function SettingsPage() {
 
                   <button
                     key={item.id}
-                    onClick={() =>
-                      setActiveSection(item.id)
-                    }
+                    type="button"
+                    onClick={() => {
+                      setActiveSection(item.id);
+                      setMessage("");
+                      setError("");
+                    }}
                     className={`
                       w-full
                       flex
@@ -340,6 +688,7 @@ export default function SettingsPage() {
               <div className="border-t p-3">
 
                 <button
+                  type="button"
                   onClick={handleLogout}
                   className="
                     w-full
@@ -372,7 +721,29 @@ export default function SettingsPage() {
 
           <section className="col-span-9">
 
-            {/* SUCCESS MESSAGE */}
+            {/* ERROR */}
+
+            {error && (
+
+              <div className="
+                mb-6
+                bg-red-50
+                border
+                border-red-200
+                text-red-700
+                rounded-lg
+                px-4
+                py-3
+              ">
+                <strong>
+                  Error:
+                </strong>{" "}
+                {error}
+              </div>
+
+            )}
+
+            {/* SUCCESS */}
 
             {message && (
 
@@ -385,6 +756,7 @@ export default function SettingsPage() {
                 rounded-lg
                 px-4
                 py-3
+                font-medium
               ">
                 ✓ {message}
               </div>
@@ -392,7 +764,7 @@ export default function SettingsPage() {
             )}
 
             {/* ================================================= */}
-            {/* COMPANY */}
+            {/* COMPANY PROFILE */}
             {/* ================================================= */}
 
             {activeSection === "company" && (
@@ -402,11 +774,31 @@ export default function SettingsPage() {
                 description="Manage the information displayed for your construction company."
               >
 
-                <div className="grid grid-cols-2 gap-6">
+                {!canEditCompany && (
+
+                  <div className="
+                    mb-6
+                    bg-yellow-50
+                    border
+                    border-yellow-200
+                    text-yellow-700
+                    rounded-lg
+                    px-4
+                    py-3
+                    text-sm
+                  ">
+                    You can view the company profile, but only the
+                    company owner or an Admin can edit it.
+                  </div>
+
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <Input
                     label="Company Name"
                     value={settings.companyName}
+                    disabled={!canEditCompany}
                     onChange={(value) =>
                       updateSetting(
                         "companyName",
@@ -419,6 +811,7 @@ export default function SettingsPage() {
                     label="Company Email"
                     type="email"
                     value={settings.companyEmail}
+                    disabled={!canEditCompany}
                     onChange={(value) =>
                       updateSetting(
                         "companyEmail",
@@ -428,8 +821,21 @@ export default function SettingsPage() {
                   />
 
                   <Input
+                    label="Company Address"
+                    value={settings.companyAddress}
+                    disabled={!canEditCompany}
+                    onChange={(value) =>
+                      updateSetting(
+                        "companyAddress",
+                        value
+                      )
+                    }
+                  />
+
+                  <Input
                     label="Phone"
                     value={settings.phone}
+                    disabled={!canEditCompany}
                     onChange={(value) =>
                       updateSetting(
                         "phone",
@@ -441,6 +847,7 @@ export default function SettingsPage() {
                   <Input
                     label="Website"
                     value={settings.website}
+                    disabled={!canEditCompany}
                     onChange={(value) =>
                       updateSetting(
                         "website",
@@ -451,10 +858,29 @@ export default function SettingsPage() {
 
                 </div>
 
-                <SaveButton
-                  saving={saving}
-                  onClick={saveSettings}
-                />
+                <div className="
+                  mt-6
+                  rounded-lg
+                  bg-gray-50
+                  border
+                  p-4
+                ">
+
+                  <p className="text-sm text-gray-500">
+                    Company information is stored in your
+                    Supabase company record.
+                  </p>
+
+                </div>
+
+                {canEditCompany && (
+
+                  <SaveButton
+                    saving={saving}
+                    onClick={saveCompanyProfile}
+                  />
+
+                )}
 
               </SettingsCard>
 
@@ -471,7 +897,7 @@ export default function SettingsPage() {
                 description="View your account information."
               >
 
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <div>
 
@@ -498,27 +924,25 @@ export default function SettingsPage() {
                   <Input
                     label="Display Name"
                     value="Rakesh"
+                    disabled
                     onChange={() => {}}
                   />
 
                   <Input
                     label="Role"
                     value="Project Engineer"
+                    disabled
                     onChange={() => {}}
                   />
 
                   <Input
                     label="Department"
                     value="Project Management"
+                    disabled
                     onChange={() => {}}
                   />
 
                 </div>
-
-                <SaveButton
-                  saving={saving}
-                  onClick={saveSettings}
-                />
 
               </SettingsCard>
 
@@ -528,8 +952,7 @@ export default function SettingsPage() {
             {/* NOTIFICATIONS */}
             {/* ================================================= */}
 
-            {activeSection ===
-              "notifications" && (
+            {activeSection === "notifications" && (
 
               <SettingsCard
                 title="Notifications"
@@ -608,7 +1031,7 @@ export default function SettingsPage() {
 
                 <SaveButton
                   saving={saving}
-                  onClick={saveSettings}
+                  onClick={savePreferences}
                 />
 
               </SettingsCard>
@@ -619,8 +1042,7 @@ export default function SettingsPage() {
             {/* APPEARANCE */}
             {/* ================================================= */}
 
-            {activeSection ===
-              "appearance" && (
+            {activeSection === "appearance" && (
 
               <SettingsCard
                 title="Appearance"
@@ -663,11 +1085,11 @@ export default function SettingsPage() {
                     "
                   >
 
-                    <option>
+                    <option value="English">
                       English
                     </option>
 
-                    <option>
+                    <option value="Spanish">
                       Spanish
                     </option>
 
@@ -721,7 +1143,7 @@ export default function SettingsPage() {
 
                 <SaveButton
                   saving={saving}
-                  onClick={saveSettings}
+                  onClick={savePreferences}
                 />
 
               </SettingsCard>
@@ -732,15 +1154,14 @@ export default function SettingsPage() {
             {/* PROJECT PREFERENCES */}
             {/* ================================================= */}
 
-            {activeSection ===
-              "projects" && (
+            {activeSection === "projects" && (
 
               <SettingsCard
                 title="Project Preferences"
                 description="Set default values used when creating project records."
               >
 
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   <Select
                     label="Default RFI Priority"
@@ -801,7 +1222,7 @@ export default function SettingsPage() {
 
                 <SaveButton
                   saving={saving}
-                  onClick={saveSettings}
+                  onClick={savePreferences}
                 />
 
               </SettingsCard>
@@ -812,8 +1233,7 @@ export default function SettingsPage() {
             {/* SECURITY */}
             {/* ================================================= */}
 
-            {activeSection ===
-              "security" && (
+            {activeSection === "security" && (
 
               <SettingsCard
                 title="Security"
@@ -827,7 +1247,7 @@ export default function SettingsPage() {
                   mb-4
                 ">
 
-                  <div className="flex justify-between">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
                     <div>
 
@@ -842,6 +1262,7 @@ export default function SettingsPage() {
                     </div>
 
                     <button
+                      type="button"
                       onClick={async () => {
 
                         if (!userEmail) {
@@ -902,6 +1323,7 @@ export default function SettingsPage() {
                   </p>
 
                   <button
+                    type="button"
                     onClick={handleLogout}
                     className="
                       mt-4
@@ -950,6 +1372,7 @@ export default function SettingsPage() {
                   </p>
 
                   <button
+                    type="button"
                     onClick={() => {
                       alert(
                         "Data export can be connected to your Supabase project tables."
@@ -988,6 +1411,7 @@ export default function SettingsPage() {
                   </p>
 
                   <button
+                    type="button"
                     onClick={resetPreferences}
                     className="
                       mt-4
@@ -1070,11 +1494,13 @@ function Input({
   value,
   onChange,
   type = "text",
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  disabled?: boolean;
 }) {
   return (
     <div>
@@ -1086,10 +1512,11 @@ function Input({
       <input
         type={type}
         value={value}
+        disabled={disabled}
         onChange={(e) =>
           onChange(e.target.value)
         }
-        className="
+        className={`
           w-full
           border
           rounded-lg
@@ -1098,7 +1525,12 @@ function Input({
           focus:outline-none
           focus:ring-2
           focus:ring-blue-500
-        "
+          ${
+            disabled
+              ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+              : "bg-white"
+          }
+        `}
       />
 
     </div>
@@ -1258,6 +1690,7 @@ function SaveButton({
     <div className="mt-8 flex justify-end">
 
       <button
+        type="button"
         onClick={onClick}
         disabled={saving}
         className="
@@ -1269,6 +1702,7 @@ function SaveButton({
           py-3
           rounded-lg
           font-medium
+          transition
         "
       >
         {saving

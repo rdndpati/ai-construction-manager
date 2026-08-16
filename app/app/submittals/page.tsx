@@ -27,6 +27,7 @@ type Submittal = {
 type Project = {
   id: string;
   name: string;
+  company_id?: string | null;
 };
 
 export default function SubmittalsPage() {
@@ -41,92 +42,280 @@ export default function SubmittalsPage() {
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] =
+    useState<string | null>(null);
 
   // =====================================================
-  // LOAD SUBMITTALS
+  // LOAD USER + ALLOWED PROJECTS + SUBMITTALS
   // =====================================================
 
   async function loadSubmittals() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from("submittals")
-        .select("*")
-        .order("created_at", {
-          ascending: false,
-        });
-
-      if (error) {
-        console.error("SUBMITTAL LOAD ERROR:", error);
-
-        alert(
-          `Unable to load submittals:\n${error.message}`
-        );
-
-        return;
-      }
-
-      const records = (data ?? []) as Submittal[];
-
-      setSubmittals(records);
-
-      // =================================================
-      // LOAD PROJECT NAMES
-      // =================================================
-
-      const projectIds = Array.from(
-        new Set(
-          records
-            .map((item) => item.project_id)
-            .filter(
-              (id): id is string => Boolean(id)
-            )
-        )
-      );
-
-      if (projectIds.length === 0) {
-        setProjects({});
-        return;
-      }
+      // ---------------------------------------------------
+      // 1. Get logged-in user
+      // ---------------------------------------------------
 
       const {
-        data: projectData,
-        error: projectError,
-      } = await supabase
-        .from("projects")
-        .select("id, name")
-        .in("id", projectIds);
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-      if (projectError) {
-        console.error(
-          "PROJECT LOAD ERROR:",
-          projectError
-        );
-
+      if (userError || !user) {
+        router.replace("/login");
         return;
       }
 
-      const projectMap: Record<string, string> = {};
+      // ---------------------------------------------------
+      // 2. Get profile
+      // ---------------------------------------------------
 
-      ((projectData ?? []) as Project[]).forEach(
+      const {
+        data: profile,
+        error: profileError,
+      } = await supabase
+        .from("profiles")
+        .select(`
+          id,
+          company_id,
+          is_owner,
+          roles (
+            name
+          )
+        `)
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profile) {
+        console.error(
+          "PROFILE LOAD ERROR:",
+          profileError
+        );
+
+        alert("Unable to load your profile.");
+        return;
+      }
+
+      // ---------------------------------------------------
+      // 3. Determine role
+      // ---------------------------------------------------
+
+      const roleData = profile.roles as unknown as
+        | { name: string }
+        | { name: string }[]
+        | null;
+
+      const roleName = Array.isArray(roleData)
+        ? roleData[0]?.name
+        : roleData?.name;
+
+      const isOwner =
+        profile.is_owner === true;
+
+      const isAdmin =
+        roleName === "Admin";
+
+      // ---------------------------------------------------
+      // 4. Get projects user can access
+      // ---------------------------------------------------
+
+      let allowedProjects: Project[] = [];
+
+      // ===================================================
+      // OWNER / ADMIN
+      // ===================================================
+
+      if (isOwner || isAdmin) {
+        const {
+          data: projectData,
+          error: projectError,
+        } = await supabase
+          .from("projects")
+          .select("id, name, company_id")
+          .eq(
+            "company_id",
+            profile.company_id
+          )
+          .order("name");
+
+        if (projectError) {
+          console.error(
+            "ADMIN PROJECT LOAD ERROR:",
+            projectError
+          );
+
+          alert(
+            `Unable to load projects:\n${projectError.message}`
+          );
+
+          return;
+        }
+
+        allowedProjects =
+          (projectData ?? []) as Project[];
+      }
+
+      // ===================================================
+      // REGULAR USER
+      // ===================================================
+
+      else {
+        const {
+          data: memberData,
+          error: memberError,
+        } = await supabase
+          .from("project_members")
+          .select(`
+            project_id,
+            projects (
+              id,
+              name,
+              company_id
+            )
+          `)
+          .eq(
+            "profile_id",
+            user.id
+          );
+
+        if (memberError) {
+          console.error(
+            "PROJECT MEMBERS ERROR:",
+            memberError
+          );
+
+          alert(
+            `Unable to load your project access:\n${memberError.message}`
+          );
+
+          return;
+        }
+
+        allowedProjects = (
+          memberData ?? []
+        )
+          .map((member: any) => {
+            const project = Array.isArray(
+              member.projects
+            )
+              ? member.projects[0]
+              : member.projects;
+
+            return project;
+          })
+          .filter(
+            (project: Project | null | undefined) =>
+              Boolean(project)
+          ) as Project[];
+      }
+
+      // ---------------------------------------------------
+      // 5. Remove duplicates
+      // ---------------------------------------------------
+
+      const uniqueProjects = Array.from(
+        new Map(
+          allowedProjects.map(
+            (project) => [
+              project.id,
+              project,
+            ]
+          )
+        ).values()
+      );
+
+      // ---------------------------------------------------
+      // 6. Project map
+      // ---------------------------------------------------
+
+      const projectMap: Record<string, string> =
+        {};
+
+      uniqueProjects.forEach(
         (project) => {
-          projectMap[project.id] = project.name;
+          projectMap[project.id] =
+            project.name;
         }
       );
 
       setProjects(projectMap);
 
+      // ---------------------------------------------------
+      // 7. Get allowed project IDs
+      // ---------------------------------------------------
+
+      const allowedProjectIds =
+        uniqueProjects.map(
+          (project) => project.id
+        );
+
+      // ---------------------------------------------------
+      // 8. No project access
+      // ---------------------------------------------------
+
+      if (
+        allowedProjectIds.length === 0
+      ) {
+        setSubmittals([]);
+        return;
+      }
+
+      // ---------------------------------------------------
+      // 9. Load ONLY submittals from allowed projects
+      // ---------------------------------------------------
+
+      const {
+        data: submittalData,
+        error: submittalError,
+      } = await supabase
+        .from("submittals")
+        .select("*")
+        .in(
+          "project_id",
+          allowedProjectIds
+        )
+        .order(
+          "created_at",
+          {
+            ascending: false,
+          }
+        );
+
+      if (submittalError) {
+        console.error(
+          "SUBMITTAL LOAD ERROR:",
+          submittalError
+        );
+
+        alert(
+          `Unable to load submittals:\n${submittalError.message}`
+        );
+
+        return;
+      }
+
+      setSubmittals(
+        (submittalData ?? []) as Submittal[]
+      );
+
     } catch (error) {
-      console.error("LOAD ERROR:", error);
+      console.error(
+        "LOAD SUBMITTALS ERROR:",
+        error
+      );
 
-      alert("Unable to load submittals.");
-
+      alert(
+        "Unable to load submittals."
+      );
     } finally {
       setLoading(false);
     }
   }
+
+  // =====================================================
+  // INITIAL LOAD
+  // =====================================================
 
   useEffect(() => {
     loadSubmittals();
@@ -196,54 +385,59 @@ export default function SubmittalsPage() {
   // SEARCH + FILTER
   // =====================================================
 
-  const filteredSubmittals = useMemo(() => {
-    const text = search
-      .trim()
-      .toLowerCase();
+  const filteredSubmittals =
+    useMemo(() => {
+      const text =
+        search
+          .trim()
+          .toLowerCase();
 
-    return submittals.filter((item) => {
+      return submittals.filter(
+        (item) => {
+          const status =
+            item.status ||
+            "Pending";
 
-      const status =
-        item.status || "Pending";
+          if (
+            statusFilter !== "All" &&
+            status !== statusFilter
+          ) {
+            return false;
+          }
 
-      // Status filter
-      if (
-        statusFilter !== "All" &&
-        status !== statusFilter
-      ) {
-        return false;
-      }
+          if (!text) {
+            return true;
+          }
 
-      // Search
-      if (!text) {
-        return true;
-      }
+          const searchable = [
+            getProjectName(
+              item.project_id
+            ),
+            item.submittal_number,
+            item.title,
+            item.vendor,
+            item.manufacturer,
+            getSubmittedBy(item),
+            getSentTo(item),
+            getBallInCourt(item),
+            item.reviewer,
+            item.status,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
 
-      const searchable = [
-        getProjectName(item.project_id),
-        item.submittal_number,
-        item.title,
-        item.vendor,
-        item.manufacturer,
-        getSubmittedBy(item),
-        getSentTo(item),
-        getBallInCourt(item),
-        item.reviewer,
-        item.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      return searchable.includes(text);
-    });
-
-  }, [
-    submittals,
-    projects,
-    search,
-    statusFilter,
-  ]);
+          return searchable.includes(
+            text
+          );
+        }
+      );
+    }, [
+      submittals,
+      projects,
+      search,
+      statusFilter,
+    ]);
 
   // =====================================================
   // VIEW
@@ -263,20 +457,23 @@ export default function SubmittalsPage() {
   }
 
   // =====================================================
-  // GET STORAGE PATH FROM PUBLIC URL
+  // STORAGE PATH
   // =====================================================
 
   function getStoragePath(
     fileUrl: string
   ) {
     try {
-      const url = new URL(fileUrl);
+      const url =
+        new URL(fileUrl);
 
       const marker =
         "/storage/v1/object/public/submittals/";
 
       const index =
-        url.pathname.indexOf(marker);
+        url.pathname.indexOf(
+          marker
+        );
 
       if (index === -1) {
         return null;
@@ -287,8 +484,9 @@ export default function SubmittalsPage() {
           index + marker.length
         );
 
-      return decodeURIComponent(path);
-
+      return decodeURIComponent(
+        path
+      );
     } catch (error) {
       console.error(
         "STORAGE PATH ERROR:",
@@ -321,50 +519,48 @@ export default function SubmittalsPage() {
     setDownloadingId(item.id);
 
     try {
-      // -----------------------------------------------
-      // Try Supabase Storage directly
-      // -----------------------------------------------
-
       const storagePath =
         getStoragePath(
           item.file_url
         );
 
       if (storagePath) {
-
         const {
           data,
           error,
         } = await supabase.storage
           .from("submittals")
-          .download(storagePath);
+          .download(
+            storagePath
+          );
 
         if (!error && data) {
-
           const blobUrl =
             window.URL.createObjectURL(
               data
             );
 
           const link =
-            document.createElement("a");
+            document.createElement(
+              "a"
+            );
 
-          link.href = blobUrl;
+          link.href =
+            blobUrl;
 
-          const safeName =
-            (
-              item.title ||
-              item.submittal_number ||
-              "submittal"
+          const safeName = (
+            item.title ||
+            item.submittal_number ||
+            "submittal"
+          )
+            .replace(
+              /[^a-z0-9]/gi,
+              "_"
             )
-              .replace(
-                /[^a-z0-9]/gi,
-                "_"
-              )
-              .substring(
-                0,
-                100
-              );
+            .substring(
+              0,
+              100
+            );
 
           link.download =
             `${safeName}.pdf`;
@@ -385,49 +581,27 @@ export default function SubmittalsPage() {
         }
 
         console.error(
-          "SUPABASE STORAGE DOWNLOAD ERROR:",
+          "STORAGE DOWNLOAD ERROR:",
           error
         );
       }
 
-      // -----------------------------------------------
-      // Fallback: open public URL
-      // -----------------------------------------------
-
-      const link =
-        document.createElement("a");
-
-      link.href =
-        item.file_url;
-
-      link.target =
-        "_blank";
-
-      link.rel =
-        "noopener noreferrer";
-
-      document.body.appendChild(
-        link
-      );
-
-      link.click();
-
-      link.remove();
-
-    } catch (error) {
-
-      console.error(
-        "DOWNLOAD ERROR:",
-        error
-      );
-
-      // Final fallback
       window.open(
         item.file_url,
         "_blank",
         "noopener,noreferrer"
       );
+    } catch (error) {
+      console.error(
+        "DOWNLOAD ERROR:",
+        error
+      );
 
+      window.open(
+        item.file_url,
+        "_blank",
+        "noopener,noreferrer"
+      );
     } finally {
       setDownloadingId(null);
     }
@@ -459,14 +633,14 @@ export default function SubmittalsPage() {
     setSendingId(item.id);
 
     try {
-
       const {
         error,
       } = await supabase
         .from("submittals")
         .update({
           status: "In Review",
-          ball_in_court: receiver,
+          ball_in_court:
+            receiver,
         })
         .eq(
           "id",
@@ -474,7 +648,6 @@ export default function SubmittalsPage() {
         );
 
       if (error) {
-
         console.error(
           "SEND ERROR:",
           error
@@ -492,9 +665,7 @@ export default function SubmittalsPage() {
       );
 
       await loadSubmittals();
-
     } catch (error) {
-
       console.error(
         "SEND ERROR:",
         error
@@ -503,7 +674,6 @@ export default function SubmittalsPage() {
       alert(
         "Unable to send submittal."
       );
-
     } finally {
       setSendingId(null);
     }
@@ -536,20 +706,13 @@ export default function SubmittalsPage() {
     setDeletingId(item.id);
 
     try {
-
-      // -----------------------------------------------
-      // Delete file from storage if it exists
-      // -----------------------------------------------
-
       if (item.file_url) {
-
         const storagePath =
           getStoragePath(
             item.file_url
           );
 
         if (storagePath) {
-
           const {
             error: storageError,
           } = await supabase.storage
@@ -567,10 +730,6 @@ export default function SubmittalsPage() {
         }
       }
 
-      // -----------------------------------------------
-      // Delete database record
-      // -----------------------------------------------
-
       const {
         error,
       } = await supabase
@@ -582,9 +741,8 @@ export default function SubmittalsPage() {
         );
 
       if (error) {
-
         console.error(
-          "DELETE SUBMITTAL ERROR:",
+          "DELETE ERROR:",
           error
         );
 
@@ -594,8 +752,6 @@ export default function SubmittalsPage() {
 
         return;
       }
-
-      // Remove from screen immediately
 
       setSubmittals(
         (previous) =>
@@ -609,9 +765,7 @@ export default function SubmittalsPage() {
       alert(
         "Submittal deleted successfully."
       );
-
     } catch (error) {
-
       console.error(
         "DELETE ERROR:",
         error
@@ -620,7 +774,6 @@ export default function SubmittalsPage() {
       alert(
         "Unable to delete submittal."
       );
-
     } finally {
       setDeletingId(null);
     }
@@ -671,14 +824,11 @@ export default function SubmittalsPage() {
   return (
     <main className="p-8 bg-gray-50 min-h-screen">
 
-      {/* ============================================= */}
       {/* HEADER */}
-      {/* ============================================= */}
 
       <div className="flex justify-between items-center mb-8">
 
         <div>
-
           <h1 className="text-3xl font-bold text-gray-900">
             Submittal Management
           </h1>
@@ -688,7 +838,6 @@ export default function SubmittalsPage() {
             product, and document
             submittals.
           </p>
-
         </div>
 
         <button
@@ -698,81 +847,56 @@ export default function SubmittalsPage() {
               "/app/submittals/new"
             )
           }
-          className="
-            bg-blue-600
-            hover:bg-blue-700
-            text-white
-            px-5
-            py-3
-            rounded-lg
-            font-semibold
-            shadow-sm
-          "
+          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-lg font-semibold shadow-sm"
         >
           + New Submittal
         </button>
 
       </div>
 
-      {/* ============================================= */}
       {/* SUMMARY */}
-      {/* ============================================= */}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
 
         <div className="bg-white border rounded-xl p-6">
-
           <p className="text-gray-500">
             Total
           </p>
-
           <p className="text-3xl font-bold mt-2">
             {total}
           </p>
-
         </div>
 
         <div className="bg-yellow-50 border rounded-xl p-6">
-
           <p className="text-gray-500">
             Pending
           </p>
-
           <p className="text-3xl font-bold mt-2">
             {pending}
           </p>
-
         </div>
 
         <div className="bg-green-50 border rounded-xl p-6">
-
           <p className="text-gray-500">
             Approved
           </p>
-
           <p className="text-3xl font-bold mt-2">
             {approved}
           </p>
-
         </div>
 
         <div className="bg-red-50 border rounded-xl p-6">
-
           <p className="text-gray-500">
             Rejected
           </p>
-
           <p className="text-3xl font-bold mt-2">
             {rejected}
           </p>
-
         </div>
 
       </div>
 
-      {/* ============================================= */}
-      {/* SEARCH + FILTER */}
-      {/* ============================================= */}
+      {/* SEARCH */}
 
       <div className="bg-white border rounded-xl p-4 mb-5">
 
@@ -786,16 +910,7 @@ export default function SubmittalsPage() {
               )
             }
             placeholder="Search submittal #, title, vendor, sender, receiver..."
-            className="
-              flex-1
-              border
-              rounded-lg
-              px-4
-              py-3
-              outline-none
-              focus:ring-2
-              focus:ring-blue-500
-            "
+            className="flex-1 border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500"
           />
 
           <select
@@ -805,15 +920,8 @@ export default function SubmittalsPage() {
                 e.target.value
               )
             }
-            className="
-              border
-              rounded-lg
-              px-4
-              py-3
-              bg-white
-            "
+            className="border rounded-lg px-4 py-3 bg-white"
           >
-
             <option value="All">
               All
             </option>
@@ -837,18 +945,12 @@ export default function SubmittalsPage() {
             <option value="Rejected">
               Rejected
             </option>
-
           </select>
 
           <button
             type="button"
             onClick={handleReset}
-            className="
-              border
-              rounded-lg
-              px-5
-              hover:bg-gray-50
-            "
+            className="border rounded-lg px-5 hover:bg-gray-50"
           >
             Reset
           </button>
@@ -857,9 +959,7 @@ export default function SubmittalsPage() {
 
       </div>
 
-      {/* ============================================= */}
       {/* TABLE */}
-      {/* ============================================= */}
 
       <div className="bg-white border rounded-xl overflow-x-auto">
 
@@ -919,73 +1019,52 @@ export default function SubmittalsPage() {
 
           <tbody>
 
-            {/* LOADING */}
-
             {loading && (
               <tr>
-
                 <td
                   colSpan={11}
                   className="p-12 text-center text-gray-500"
                 >
                   Loading submittals...
                 </td>
-
               </tr>
             )}
-
-            {/* EMPTY */}
 
             {!loading &&
               filteredSubmittals.length === 0 && (
                 <tr>
-
                   <td
                     colSpan={11}
                     className="p-12 text-center text-gray-500"
                   >
-                    No submittals found.
+                    No submittals found for
+                    your assigned projects.
                   </td>
-
                 </tr>
               )}
-
-            {/* DATA */}
 
             {!loading &&
               filteredSubmittals.map(
                 (item) => {
-
                   const status =
                     item.status ||
                     "Pending";
 
                   return (
-
                     <tr
                       key={item.id}
-                      className="
-                        border-b
-                        hover:bg-gray-50
-                      "
+                      className="border-b hover:bg-gray-50"
                     >
 
-                      {/* PROJECT */}
-
                       <td className="p-4">
-
                         <div className="font-semibold text-gray-900">
                           {getProjectName(
                             item.project_id
                           )}
                         </div>
-
                       </td>
 
-                      {/* SUBMITTAL NUMBER */}
-
                       <td className="p-4">
-
                         <button
                           type="button"
                           onClick={() =>
@@ -993,33 +1072,22 @@ export default function SubmittalsPage() {
                               item
                             )
                           }
-                          className="
-                            text-blue-600
-                            font-semibold
-                            hover:underline
-                          "
+                          className="text-blue-600 font-semibold hover:underline"
                         >
                           {item.submittal_number ||
                             "—"}
                         </button>
-
                       </td>
-
-                      {/* TITLE */}
 
                       <td className="p-4 font-medium">
                         {item.title ||
                           "Untitled"}
                       </td>
 
-                      {/* VENDOR */}
-
                       <td className="p-4">
                         {item.vendor ||
                           "—"}
                       </td>
-
-                      {/* SUBMITTED BY */}
 
                       <td className="p-4">
                         {getSubmittedBy(
@@ -1027,41 +1095,21 @@ export default function SubmittalsPage() {
                         )}
                       </td>
 
-                      {/* SENT TO */}
-
                       <td className="p-4">
                         {getSentTo(
                           item
                         )}
                       </td>
 
-                      {/* BALL IN COURT */}
-
                       <td className="p-4">
-
-                        <span
-                          className="
-                            inline-flex
-                            px-3
-                            py-1
-                            rounded-full
-                            text-xs
-                            font-semibold
-                            bg-blue-100
-                            text-blue-700
-                          "
-                        >
+                        <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
                           {getBallInCourt(
                             item
                           )}
                         </span>
-
                       </td>
 
-                      {/* STATUS */}
-
                       <td className="p-4">
-
                         <span
                           className={`
                             inline-flex
@@ -1086,35 +1134,21 @@ export default function SubmittalsPage() {
                         >
                           {status}
                         </span>
-
                       </td>
-
-                      {/* REVIEWER */}
 
                       <td className="p-4">
                         {item.reviewer ||
                           "—"}
                       </td>
 
-                      {/* DUE DATE */}
-
                       <td className="p-4">
                         {item.due_date ||
                           "—"}
                       </td>
 
-                      {/* ACTIONS */}
-
                       <td className="p-4">
 
-                        <div className="
-                          flex
-                          items-center
-                          gap-3
-                          whitespace-nowrap
-                        ">
-
-                          {/* VIEW */}
+                        <div className="flex items-center gap-3 whitespace-nowrap">
 
                           <button
                             type="button"
@@ -1123,20 +1157,12 @@ export default function SubmittalsPage() {
                                 item
                               )
                             }
-                            className="
-                              text-blue-600
-                              hover:text-blue-800
-                              hover:underline
-                              font-medium
-                            "
+                            className="text-blue-600 hover:underline font-medium"
                           >
                             View
                           </button>
 
-                          {/* DOWNLOAD */}
-
                           {item.file_url ? (
-
                             <button
                               type="button"
                               onClick={() =>
@@ -1148,36 +1174,18 @@ export default function SubmittalsPage() {
                                 downloadingId ===
                                 item.id
                               }
-                              className="
-                                text-green-600
-                                hover:text-green-800
-                                hover:underline
-                                font-medium
-                                disabled:opacity-50
-                              "
+                              className="text-green-600 hover:underline font-medium disabled:opacity-50"
                             >
-
                               {downloadingId ===
                               item.id
                                 ? "Downloading..."
                                 : "⬇ Download"}
-
                             </button>
-
                           ) : (
-
-                            <span
-                              className="
-                                text-gray-400
-                                text-sm
-                              "
-                            >
+                            <span className="text-gray-400 text-sm">
                               No File
                             </span>
-
                           )}
-
-                          {/* SEND */}
 
                           <button
                             type="button"
@@ -1190,23 +1198,13 @@ export default function SubmittalsPage() {
                               sendingId ===
                               item.id
                             }
-                            className="
-                              text-purple-600
-                              hover:text-purple-800
-                              hover:underline
-                              font-medium
-                              disabled:opacity-50
-                            "
+                            className="text-purple-600 hover:underline font-medium disabled:opacity-50"
                           >
-
                             {sendingId ===
                             item.id
                               ? "Sending..."
                               : "📤 Send"}
-
                           </button>
-
-                          {/* DELETE */}
 
                           <button
                             type="button"
@@ -1219,20 +1217,12 @@ export default function SubmittalsPage() {
                               deletingId ===
                               item.id
                             }
-                            className="
-                              text-red-600
-                              hover:text-red-800
-                              hover:underline
-                              font-medium
-                              disabled:opacity-50
-                            "
+                            className="text-red-600 hover:underline font-medium disabled:opacity-50"
                           >
-
                             {deletingId ===
                             item.id
                               ? "Deleting..."
                               : "🗑 Delete"}
-
                           </button>
 
                         </div>
@@ -1240,7 +1230,6 @@ export default function SubmittalsPage() {
                       </td>
 
                     </tr>
-
                   );
                 }
               )}
@@ -1251,17 +1240,13 @@ export default function SubmittalsPage() {
 
       </div>
 
-      {/* ============================================= */}
-      {/* FOOTER */}
-      {/* ============================================= */}
-
       {!loading && (
         <p className="text-sm text-gray-500 mt-4">
           Showing{" "}
           {filteredSubmittals.length}{" "}
           of{" "}
           {submittals.length}{" "}
-          submittals
+          submittals from your accessible projects.
         </p>
       )}
 
