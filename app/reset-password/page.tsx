@@ -8,37 +8,64 @@ export default function ResetPasswordPage() {
   const router = useRouter();
 
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] =
+    useState("");
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false);
 
   const [message, setMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] =
+    useState("");
 
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  async function handleReset(e: React.FormEvent) {
+  function getInvitationId() {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    return new URLSearchParams(
+      window.location.search
+    ).get("invitation_id");
+  }
+
+  async function handleReset(
+    e: React.FormEvent
+  ) {
     e.preventDefault();
 
     setMessage("");
     setErrorMessage("");
 
     if (password.length < 6) {
-      setErrorMessage("Password must be at least 6 characters.");
+      setErrorMessage(
+        "Password must be at least 6 characters."
+      );
       return;
     }
 
     if (password !== confirmPassword) {
-      setErrorMessage("Passwords do not match.");
+      setErrorMessage(
+        "Passwords do not match."
+      );
       return;
     }
 
     setLoading(true);
 
     try {
-      // Check that the password recovery session exists
+      const invitationId =
+        getInvitationId();
+
+      // ----------------------------------------
+      // Verify recovery session
+      // ----------------------------------------
+
       const {
         data: { session },
         error: sessionError,
@@ -48,33 +75,79 @@ export default function ResetPasswordPage() {
         setErrorMessage(
           "This password reset link is invalid or has expired. Please request a new reset link."
         );
+
         return;
       }
 
+      // ----------------------------------------
       // Update password
-      const { error } = await supabase.auth.updateUser({
-        password,
-      });
+      // ----------------------------------------
+
+      const { error } =
+        await supabase.auth.updateUser({
+          password,
+        });
 
       if (error) {
-        console.error("PASSWORD UPDATE ERROR:", error);
+        console.error(
+          "PASSWORD UPDATE ERROR:",
+          error
+        );
+
         setErrorMessage(error.message);
         return;
       }
 
+      console.log(
+        "PASSWORD UPDATED SUCCESSFULLY"
+      );
+
       setSuccess(true);
-      setMessage("Password updated successfully!");
 
-      // Sign out after changing password
-      await supabase.auth.signOut();
+      setMessage(
+        invitationId
+          ? "Password updated. Connecting you to the company..."
+          : "Password updated successfully!"
+      );
 
-      // Send user back to login
+      // ----------------------------------------
+      // IMPORTANT:
+      // DO NOT SIGN OUT.
+      //
+      // The current authenticated session is needed
+      // to accept the invitation.
+      // ----------------------------------------
+
       setTimeout(() => {
+
+        if (invitationId) {
+
+          router.replace(
+            `/app/accept-invitation?invitation_id=${encodeURIComponent(
+              invitationId
+            )}`
+          );
+
+          router.refresh();
+
+          return;
+        }
+
+        // Normal password reset
         router.replace("/login");
-      }, 2000);
+
+      }, 1200);
+
     } catch (err) {
-      console.error("RESET PASSWORD ERROR:", err);
-      setErrorMessage("Something went wrong. Please try again.");
+      console.error(
+        "RESET PASSWORD ERROR:",
+        err
+      );
+
+      setErrorMessage(
+        "Something went wrong. Please try again."
+      );
+
     } finally {
       setLoading(false);
     }
@@ -82,6 +155,7 @@ export default function ResetPasswordPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
+
       <div className="w-full max-w-md">
 
         {/* Brand */}
@@ -106,6 +180,7 @@ export default function ResetPasswordPage() {
 
           {!success ? (
             <>
+
               <div className="mb-7">
 
                 <h2 className="text-2xl font-bold text-gray-900">
@@ -123,7 +198,7 @@ export default function ResetPasswordPage() {
                 className="space-y-5"
               >
 
-                {/* New Password */}
+                {/* Password */}
                 <div>
 
                   <label
@@ -137,24 +212,36 @@ export default function ResetPasswordPage() {
 
                     <input
                       id="password"
-                      type={showPassword ? "text" : "password"}
+                      type={
+                        showPassword
+                          ? "text"
+                          : "password"
+                      }
                       required
                       minLength={6}
                       autoComplete="new-password"
                       placeholder="Enter new password"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) =>
+                        setPassword(
+                          e.target.value
+                        )
+                      }
                       className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-20 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     />
 
                     <button
                       type="button"
                       onClick={() =>
-                        setShowPassword(!showPassword)
+                        setShowPassword(
+                          !showPassword
+                        )
                       }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 hover:text-gray-800"
                     >
-                      {showPassword ? "Hide" : "Show"}
+                      {showPassword
+                        ? "Hide"
+                        : "Show"}
                     </button>
 
                   </div>
@@ -165,7 +252,7 @@ export default function ResetPasswordPage() {
 
                 </div>
 
-                {/* Confirm Password */}
+                {/* Confirm */}
                 <div>
 
                   <label
@@ -189,7 +276,9 @@ export default function ResetPasswordPage() {
                       placeholder="Confirm new password"
                       value={confirmPassword}
                       onChange={(e) =>
-                        setConfirmPassword(e.target.value)
+                        setConfirmPassword(
+                          e.target.value
+                        )
                       }
                       className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-20 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                     />
@@ -219,7 +308,6 @@ export default function ResetPasswordPage() {
                   </div>
                 )}
 
-                {/* Button */}
                 <button
                   type="submit"
                   disabled={loading}
@@ -234,11 +322,14 @@ export default function ResetPasswordPage() {
 
               <button
                 type="button"
-                onClick={() => router.push("/login")}
+                onClick={() =>
+                  router.push("/login")
+                }
                 className="w-full mt-5 text-center text-blue-600 hover:text-blue-700 hover:underline"
               >
                 ← Back to Sign In
               </button>
+
             </>
           ) : (
             <div className="text-center">
@@ -252,30 +343,28 @@ export default function ResetPasswordPage() {
               </h2>
 
               <p className="text-gray-500 mt-3">
-                Your password has been successfully updated.
+                {message}
               </p>
 
-              <p className="text-sm text-gray-400 mt-3">
-                Redirecting you to the sign in page...
-              </p>
+              <div className="mt-6">
+                <div className="animate-spin h-7 w-7 border-4 border-blue-600 border-t-transparent rounded-full mx-auto" />
+              </div>
 
-              {message && (
-                <p className="text-green-600 text-sm mt-4">
-                  {message}
-                </p>
-              )}
+              <p className="text-sm text-gray-400 mt-4">
+                Please wait...
+              </p>
 
             </div>
           )}
 
         </div>
 
-        {/* Footer */}
         <p className="text-center text-sm text-gray-400 mt-6">
           © 2026 ConstructIQ
         </p>
 
       </div>
+
     </main>
   );
 }

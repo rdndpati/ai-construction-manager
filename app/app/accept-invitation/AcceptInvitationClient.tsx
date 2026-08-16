@@ -21,10 +21,10 @@ export default function AcceptInvitationClient() {
       return;
     }
 
-    acceptInvitation();
+    acceptInvitation(invitationId);
   }, [invitationId]);
 
-  async function acceptInvitation() {
+  async function acceptInvitation(id: string) {
     try {
       setLoading(true);
       setError("");
@@ -35,11 +35,14 @@ export default function AcceptInvitationClient() {
         error: userError,
       } = await supabase.auth.getUser();
 
+      // ------------------------------------------------
+      // User is not logged in.
+      // Preserve invitation ID and send them to login.
+      // ------------------------------------------------
       if (userError || !user) {
-        setError(
-          "Your invitation link is valid, but you are not logged in."
+        router.replace(
+          `/login?invitation_id=${encodeURIComponent(id)}`
         );
-        setLoading(false);
         return;
       }
 
@@ -51,7 +54,7 @@ export default function AcceptInvitationClient() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            invitation_id: invitationId,
+            invitation_id: id,
           }),
         }
       );
@@ -77,10 +80,13 @@ export default function AcceptInvitationClient() {
       setTimeout(() => {
         router.replace("/app/dashboard");
         router.refresh();
-      }, 1500);
+      }, 1200);
 
     } catch (err: any) {
-      console.error("ACCEPT INVITATION ERROR:", err);
+      console.error(
+        "ACCEPT INVITATION ERROR:",
+        err
+      );
 
       setError(
         err?.message ||
@@ -93,21 +99,25 @@ export default function AcceptInvitationClient() {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
+      <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="bg-white rounded-2xl shadow-lg border p-10 w-full max-w-md text-center">
-          <div className="text-5xl mb-5">✉️</div>
+
+          <div className="text-5xl mb-5">
+            ✉️
+          </div>
 
           <h1 className="text-2xl font-bold text-gray-900">
             Accepting Invitation
           </h1>
 
           <p className="text-gray-500 mt-3">
-            Please wait while we connect you to the company.
+            Please wait while we connect you to your company.
           </p>
 
           <div className="mt-6">
             <div className="animate-spin h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto" />
           </div>
+
         </div>
       </main>
     );
@@ -115,10 +125,14 @@ export default function AcceptInvitationClient() {
 
   if (error) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gray-50">
+      <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="bg-white rounded-2xl shadow-lg border p-10 w-full max-w-md">
+
           <div className="text-center">
-            <div className="text-5xl mb-5">⚠️</div>
+
+            <div className="text-5xl mb-5">
+              ⚠️
+            </div>
 
             <h1 className="text-2xl font-bold text-gray-900">
               Invitation Problem
@@ -131,21 +145,36 @@ export default function AcceptInvitationClient() {
             </div>
 
             <button
-              onClick={() => router.push("/login")}
+              onClick={() => {
+                if (invitationId) {
+                  router.push(
+                    `/login?invitation_id=${encodeURIComponent(
+                      invitationId
+                    )}`
+                  );
+                } else {
+                  router.push("/login");
+                }
+              }}
               className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl p-3 font-semibold"
             >
-              Go to Login
+              Continue to Sign In
             </button>
+
           </div>
+
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
+    <main className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="bg-white rounded-2xl shadow-lg border p-10 w-full max-w-md text-center">
-        <div className="text-5xl mb-5">✅</div>
+
+        <div className="text-5xl mb-5">
+          ✅
+        </div>
 
         <h1 className="text-2xl font-bold text-gray-900">
           Invitation Accepted
@@ -154,6 +183,7 @@ export default function AcceptInvitationClient() {
         <p className="text-gray-500 mt-3">
           {message}
         </p>
+
       </div>
     </main>
   );
