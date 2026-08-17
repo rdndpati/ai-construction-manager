@@ -2,34 +2,289 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
 
-export async function POST(request: Request) {
+const SITE_URL =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  "http://localhost:3000";
+
+function buildInvitationUrl(invitationId: string) {
+  return `${SITE_URL}/app/accept-invitation?invitation_id=${encodeURIComponent(
+    invitationId
+  )}`;
+}
+
+async function getCurrentUserAndCompany() {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return {
+      error: "You must be logged in.",
+      status: 401,
+    };
+  }
+
+  const { data: profile, error: profileError } =
+    await supabaseAdmin
+      .from("profiles")
+      .select(
+        "id, company_id, role_id, is_owner"
+      )
+      .eq("id", user.id)
+      .single();
+
+  if (
+    profileError ||
+    !profile?.company_id
+  ) {
+    return {
+      error:
+        "Your account is not connected to a company.",
+      status: 400,
+    };
+  }
+
+  let isAdmin = false;
+
+  if (profile.role_id) {
+    const { data: role } =
+      await supabaseAdmin
+        .from("roles")
+        .select("name")
+        .eq("id", profile.role_id)
+        .maybeSingle();
+
+    isAdmin =
+      role?.name?.trim().toLowerCase() ===
+      "admin";
+  }
+
+  if (
+    profile.is_owner !== true &&
+    !isAdmin
+  ) {
+    return {
+      error:
+        "Only company owners and administrators can manage invitations.",
+      status: 403,
+    };
+  }
+
+  return {
+    user,
+    profile,
+    companyId: profile.company_id,
+  };
+}
+
+/**
+ * GET
+ *
+ * Loads pending/accepted invitations for the
+ * current user's company.
+ */
+export async function GET() {
   try {
-    // ============================================================
-    // 1. GET LOGGED-IN USER
-    // ============================================================
+    const auth =
+      await getCurrentUserAndCompany();
 
-    const supabase = await createClient();
-
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    if ("error" in auth) {
       return NextResponse.json(
-        {
-          error:
-            "You must be logged in to invite a team member.",
-        },
-        { status: 401 }
+        { error: auth.error },
+        { status: auth.status }
       );
     }
 
-    // ============================================================
-    // 2. READ REQUEST
-    // ============================================================
+    const { data, error } =
+      await supabaseAdmin
+        .from("invitations")
+        .select(
+          `
+          id,
+          full_name,
+          email,
+          role_id,
+          company_id,
+          invited_by,
+          status,
+          created_at
+        `
+        )
+        .eq(
+          "company_id",
+          auth.companyId
+        )
+        .order("created_at", {
+          ascending: false,
+        });
+
+    if (error) {
+      console.error(
+        "LOAD INVITATIONS ERROR:",
+        error
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Unable to load invitations.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const invitations = (data || []).map(
+      (invitation) => ({
+        ...invitation,
+        invitation_url:
+          buildInvitationUrl(
+            invitation.id
+          ),
+      })
+    );
+
+    return NextResponse.json({
+      success: true,
+      invitations,
+    });
+  } catch (error) {
+    console.error(
+      "GET INVITATIONS ERROR:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to load invitations.",
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST
+ *
+ * Two operations:
+ *
+ * 1. Create a new invitation
+ * 2. "Resend" a pending invitation by returning
+ *    the invitation link again.
+ *
+ * No email service is used.
+ */
+export async function POST(
+  request: Request
+) {
+  try {
+    const auth =
+      await getCurrentUserAndCompany();
+
+    if ("error" in auth) {
+      return NextResponse.json(
+        { error: auth.error },
+        { status: auth.status }
+      );
+    }
 
     const body = await request.json();
+
+    /*
+     * ============================================================
+     * RESEND / RE-COPY EXISTING INVITATION
+     * ============================================================
+     */
+
+    if (body?.action === "resend") {
+      const invitationId =
+        body?.invitation_id;
+
+      if (!invitationId) {
+        return NextResponse.json(
+          {
+            error:
+              "Invitation ID is required.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const { data: invitation, error } =
+        await supabaseAdmin
+          .from("invitations")
+          .select(
+            "id, full_name, email, role_id, company_id, status"
+          )
+          .eq("id", invitationId)
+          .eq(
+            "company_id",
+            auth.companyId
+          )
+          .maybeSingle();
+
+      if (error) {
+        console.error(
+          "RESEND LOOKUP ERROR:",
+          error
+        );
+
+        return NextResponse.json(
+          {
+            error:
+              "Unable to find invitation.",
+          },
+          { status: 500 }
+        );
+      }
+
+      if (!invitation) {
+        return NextResponse.json(
+          {
+            error:
+              "Invitation was not found.",
+          },
+          { status: 404 }
+        );
+      }
+
+      if (
+        invitation.status !==
+        "Pending"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Only pending invitations can be resent.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const invitationUrl =
+        buildInvitationUrl(
+          invitation.id
+        );
+
+      return NextResponse.json({
+        success: true,
+        invitation_url:
+          invitationUrl,
+        message:
+          "Invitation link is ready to send again.",
+      });
+    }
+
+    /*
+     * ============================================================
+     * CREATE INVITATION
+     * ============================================================
+     */
 
     const {
       full_name,
@@ -37,7 +292,11 @@ export async function POST(request: Request) {
       role_id,
     } = body;
 
-    if (!full_name || !email || !role_id) {
+    if (
+      !full_name ||
+      !email ||
+      !role_id
+    ) {
       return NextResponse.json(
         {
           error:
@@ -47,132 +306,36 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedEmail = email
-      .trim()
-      .toLowerCase();
+    const normalizedName =
+      String(full_name).trim();
 
-    const normalizedName = full_name.trim();
-
-    // ============================================================
-    // 3. GET INVITER PROFILE
-    // ============================================================
-
-    const {
-      data: inviterProfile,
-      error: profileError,
-    } = await supabase
-      .from("profiles")
-      .select(
-        "company_id, is_owner, role_id"
-      )
-      .eq("id", user.id)
-      .single();
+    const normalizedEmail =
+      String(email)
+        .trim()
+        .toLowerCase();
 
     if (
-      profileError ||
-      !inviterProfile?.company_id
+      !normalizedName ||
+      !normalizedEmail
     ) {
-      console.error(
-        "INVITER PROFILE ERROR:",
-        profileError
-      );
-
       return NextResponse.json(
         {
           error:
-            "Your account is not connected to a company.",
+            "Full name and email are required.",
         },
         { status: 400 }
       );
     }
 
-    const companyId =
-      inviterProfile.company_id;
-
-    // ============================================================
-    // 4. VERIFY INVITER IS OWNER OR ADMIN
-    // ============================================================
-
-    let inviterIsAdmin = false;
-
-    if (inviterProfile.role_id) {
-      const {
-        data: inviterRole,
-        error: inviterRoleError,
-      } = await supabase
-        .from("roles")
-        .select("name")
-        .eq(
-          "id",
-          inviterProfile.role_id
-        )
-        .single();
-
-      if (inviterRoleError) {
-        console.error(
-          "INVITER ROLE ERROR:",
-          inviterRoleError
-        );
-      }
-
-      inviterIsAdmin =
-        inviterRole?.name
-          ?.trim()
-          .toLowerCase() === "admin";
-    }
-
-    const inviterIsOwner =
-      inviterProfile.is_owner === true;
+    /*
+     * Prevent self invitation
+     */
 
     if (
-      !inviterIsOwner &&
-      !inviterIsAdmin
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "Only company owners and administrators can invite team members.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // ============================================================
-    // 5. VERIFY SELECTED ROLE
-    // ============================================================
-
-    const {
-      data: role,
-      error: roleError,
-    } = await supabase
-      .from("roles")
-      .select("id, name")
-      .eq("id", role_id)
-      .single();
-
-    if (roleError || !role) {
-      console.error(
-        "ROLE ERROR:",
-        roleError
-      );
-
-      return NextResponse.json(
-        {
-          error:
-            "Selected role does not exist.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // ============================================================
-    // 6. PREVENT INVITING YOURSELF
-    // ============================================================
-
-    if (
-      user.email &&
-      user.email.toLowerCase() ===
-        normalizedEmail
+      auth.user.email
+        ?.trim()
+        .toLowerCase() ===
+      normalizedEmail
     ) {
       return NextResponse.json(
         {
@@ -183,36 +346,57 @@ export async function POST(request: Request) {
       );
     }
 
-    // ============================================================
-    // 7. CHECK EXISTING PENDING INVITATION
-    // ============================================================
+    /*
+     * Verify role
+     */
+
+    const { data: role, error: roleError } =
+      await supabaseAdmin
+        .from("roles")
+        .select("id, name")
+        .eq("id", role_id)
+        .maybeSingle();
+
+    if (roleError || !role) {
+      return NextResponse.json(
+        {
+          error:
+            "Selected role does not exist.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * Check existing pending invitation
+     */
 
     const {
       data: existingInvitation,
-      error: existingInvitationError,
-    } =
-      await supabaseAdmin
-        .from("invitations")
-        .select(
-          "id, status, company_id, email"
-        )
-        .eq(
-          "company_id",
-          companyId
-        )
-        .eq(
-          "email",
-          normalizedEmail
-        )
-        .eq(
-          "status",
-          "Pending"
-        )
-        .maybeSingle();
+      error:
+        existingInvitationError,
+    } = await supabaseAdmin
+      .from("invitations")
+      .select(
+        "id, status, email, full_name, role_id"
+      )
+      .eq(
+        "company_id",
+        auth.companyId
+      )
+      .eq(
+        "email",
+        normalizedEmail
+      )
+      .eq(
+        "status",
+        "Pending"
+      )
+      .maybeSingle();
 
     if (existingInvitationError) {
       console.error(
-        "EXISTING INVITATION CHECK ERROR:",
+        "PENDING INVITATION CHECK ERROR:",
         existingInvitationError
       );
 
@@ -229,623 +413,172 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error:
-            "An invitation is already pending for this email address.",
+            "A pending invitation already exists for this email address.",
           invitation_id:
             existingInvitation.id,
+          invitation_url:
+            buildInvitationUrl(
+              existingInvitation.id
+            ),
         },
         { status: 400 }
       );
     }
 
-    // ============================================================
-    // 8. CHECK WHETHER AUTH USER ALREADY EXISTS
-    // ============================================================
-
-    let existingAuthUser = null;
+    /*
+     * Check whether the user already has a profile.
+     *
+     * If they already belong to THIS company,
+     * they don't need an invitation.
+     *
+     * If they belong to ANOTHER company,
+     * do not silently move them between companies.
+     */
 
     const {
-      data: authUsers,
-      error: authUsersError,
-    } =
-      await supabaseAdmin.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000,
-      });
+      data: existingProfile,
+      error: existingProfileError,
+    } = await supabaseAdmin
+      .from("profiles")
+      .select(
+        "id, email, company_id, is_owner"
+      )
+      .ilike(
+        "email",
+        normalizedEmail
+      )
+      .maybeSingle();
 
-    if (authUsersError) {
+    if (existingProfileError) {
       console.error(
-        "AUTH USER LOOKUP ERROR:",
-        authUsersError
+        "PROFILE CHECK ERROR:",
+        existingProfileError
       );
 
       return NextResponse.json(
         {
           error:
-            "Unable to check existing user accounts.",
+            "Unable to check the existing user.",
         },
         { status: 500 }
       );
     }
 
-    existingAuthUser =
-      authUsers.users.find(
-        (authUser) =>
-          authUser.email?.toLowerCase() ===
-          normalizedEmail
-      ) || null;
-
-    // ============================================================
-    // 9. CHECK EXISTING USER PROFILE
-    // ============================================================
-
-    if (existingAuthUser) {
-      const {
-        data: existingProfile,
-        error: existingProfileError,
-      } =
-        await supabaseAdmin
-          .from("profiles")
-          .select(
-            "id, company_id, email, full_name, role_id, is_owner"
-          )
-          .eq(
-            "id",
-            existingAuthUser.id
-          )
-          .maybeSingle();
-
-      if (existingProfileError) {
-        console.error(
-          "EXISTING PROFILE ERROR:",
-          existingProfileError
-        );
-
-        return NextResponse.json(
-          {
-            error:
-              "Unable to check the existing user's company profile.",
-          },
-          { status: 500 }
-        );
-      }
-
-      // Already belongs to this company
-      if (
-        existingProfile?.company_id ===
-        companyId
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "This user is already a member of your company.",
-          },
-          { status: 400 }
-        );
-      }
-
-      // Already belongs to another company
-      if (
-        existingProfile?.company_id &&
-        existingProfile.company_id !==
-          companyId
-      ) {
-        return NextResponse.json(
-          {
-            error:
-              "This user already belongs to another company.",
-          },
-          { status: 400 }
-        );
-      }
+    if (
+      existingProfile?.company_id ===
+      auth.companyId
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This user is already a member of your company.",
+        },
+        { status: 400 }
+      );
     }
 
-    // ============================================================
-    // 10. CREATE PENDING INVITATION
-    // ============================================================
+    if (
+      existingProfile?.company_id &&
+      existingProfile.company_id !==
+        auth.companyId
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "This user already belongs to another company.",
+        },
+        { status: 400 }
+      );
+    }
+
+    /*
+     * Create invitation ONLY.
+     *
+     * Do NOT create a profile here.
+     * Do NOT add the user to the team here.
+     */
 
     const {
       data: invitation,
-      error: inviteError,
-    } =
-      await supabaseAdmin
-        .from("invitations")
-        .insert({
-          full_name: normalizedName,
-          company_id: companyId,
-          email: normalizedEmail,
-          role_id: role_id,
-          invited_by: user.id,
-          status: "Pending",
-        })
-        .select()
-        .single();
+      error: invitationError,
+    } = await supabaseAdmin
+      .from("invitations")
+      .insert({
+        full_name: normalizedName,
+        company_id: auth.companyId,
+        email: normalizedEmail,
+        role_id: role.id,
+        invited_by: auth.user.id,
+        status: "Pending",
+      })
+      .select(
+        "id, full_name, email, role_id, company_id, status, created_at"
+      )
+      .single();
 
-    if (inviteError) {
+    if (invitationError) {
       console.error(
         "INVITATION INSERT ERROR:",
-        inviteError
+        invitationError
       );
 
       return NextResponse.json(
         {
           error:
-            inviteError.message ||
+            invitationError.message ||
             "Unable to create invitation.",
         },
         { status: 400 }
       );
     }
 
-    // ============================================================
-    // 11. BUILD INVITATION URL
-    // ============================================================
-
-    const appUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      "http://localhost:3000";
-
     const invitationUrl =
-      `${appUrl}/app/accept-invitation?invitation_id=${encodeURIComponent(
+      buildInvitationUrl(
         invitation.id
-      )}`;
+      );
 
     console.log(
       "===================================="
     );
-
     console.log(
       "INVITATION CREATED"
     );
-
     console.log(
       "INVITATION ID:",
       invitation.id
     );
-
-    console.log(
-      "RECIPIENT:",
-      normalizedEmail
-    );
-
-    console.log(
-      "COMPANY:",
-      companyId
-    );
-
-    console.log(
-      "ROLE:",
-      role.name
-    );
-
-    console.log(
-      "INVITATION URL:",
-      invitationUrl
-    );
-
-    console.log(
-      "EXISTING AUTH USER:",
-      Boolean(existingAuthUser)
-    );
-
-    console.log(
-      "===================================="
-    );
-
-    // ============================================================
-    // 12. RESEND CONFIGURATION
-    // ============================================================
-
-    const resendApiKey =
-      process.env.RESEND_API_KEY;
-
-    const fromEmail =
-      process.env.RESEND_FROM_EMAIL ||
-      "onboarding@resend.dev";
-
-    // ============================================================
-    // 13. IF RESEND IS NOT CONFIGURED
-    //
-    // IMPORTANT:
-    // DO NOT DELETE THE INVITATION.
-    //
-    // The invitation remains valid and the user can
-    // join using the invitation URL.
-    // ============================================================
-
-    if (!resendApiKey) {
-      console.warn(
-        "RESEND_API_KEY is missing. Invitation created without email."
-      );
-
-      return NextResponse.json({
-        success: true,
-        email_sent: false,
-        email_error:
-          "Email service is not configured.",
-        existing_user:
-          Boolean(existingAuthUser),
-        message:
-          "Invitation created successfully. Copy the invitation link and send it to the team member.",
-        invitation_id:
-          invitation.id,
-        invitation_url:
-          invitationUrl,
-      });
-    }
-
-    // ============================================================
-    // 14. SEND INVITATION EMAIL
-    // ============================================================
-
-    const emailResponse =
-      await fetch(
-        "https://api.resend.com/emails",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-
-            Authorization:
-              `Bearer ${resendApiKey}`,
-          },
-
-          body: JSON.stringify({
-            from: fromEmail,
-
-            to: [
-              normalizedEmail,
-            ],
-
-            subject:
-              `You're invited to join ${role.name} on ConstructIQ`,
-
-            html: `
-<!DOCTYPE html>
-
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
-</head>
-
-<body
-  style="
-    margin:0;
-    padding:0;
-    background:#f3f4f6;
-    font-family:Arial, Helvetica, sans-serif;
-  "
->
-
-  <div
-    style="
-      max-width:600px;
-      margin:40px auto;
-      padding:20px;
-    "
-  >
-
-    <div
-      style="
-        background:#ffffff;
-        border-radius:16px;
-        padding:40px;
-        border:1px solid #e5e7eb;
-      "
-    >
-
-      <div
-        style="
-          text-align:center;
-          margin-bottom:30px;
-        "
-      >
-
-        <div
-          style="
-            width:64px;
-            height:64px;
-            margin:0 auto 16px;
-            background:#2563eb;
-            border-radius:16px;
-            font-size:30px;
-            line-height:64px;
-            text-align:center;
-          "
-        >
-          🏗️
-        </div>
-
-        <h1
-          style="
-            margin:0;
-            color:#111827;
-            font-size:28px;
-          "
-        >
-          ConstructIQ
-        </h1>
-
-        <p
-          style="
-            margin:8px 0 0;
-            color:#6b7280;
-            font-size:14px;
-          "
-        >
-          Engineering Project Management Platform
-        </p>
-
-      </div>
-
-      <h2
-        style="
-          color:#111827;
-          font-size:22px;
-          margin-bottom:10px;
-        "
-      >
-        You're invited to join ConstructIQ
-      </h2>
-
-      <p
-        style="
-          color:#4b5563;
-          font-size:16px;
-          line-height:1.6;
-        "
-      >
-        Hello ${escapeHtml(normalizedName)},
-      </p>
-
-      <p
-        style="
-          color:#4b5563;
-          font-size:16px;
-          line-height:1.6;
-        "
-      >
-        You have been invited to join a company
-        on ConstructIQ as:
-      </p>
-
-      <div
-        style="
-          background:#eff6ff;
-          border:1px solid #bfdbfe;
-          border-radius:12px;
-          padding:18px;
-          margin:24px 0;
-        "
-      >
-
-        <p
-          style="
-            margin:0 0 6px;
-            color:#6b7280;
-            font-size:13px;
-          "
-        >
-          Your role
-        </p>
-
-        <p
-          style="
-            margin:0;
-            color:#1d4ed8;
-            font-size:18px;
-            font-weight:bold;
-          "
-        >
-          ${escapeHtml(role.name)}
-        </p>
-
-      </div>
-
-      <p
-        style="
-          color:#4b5563;
-          font-size:16px;
-          line-height:1.6;
-        "
-      >
-        Click the button below to accept your
-        invitation and access your ConstructIQ
-        account.
-      </p>
-
-      <div
-        style="
-          text-align:center;
-          margin:32px 0;
-        "
-      >
-
-        <a
-          href="${invitationUrl}"
-          style="
-            display:inline-block;
-            background:#2563eb;
-            color:#ffffff;
-            text-decoration:none;
-            padding:14px 28px;
-            border-radius:10px;
-            font-size:16px;
-            font-weight:bold;
-          "
-        >
-          Accept Invitation
-        </a>
-
-      </div>
-
-      <p
-        style="
-          color:#6b7280;
-          font-size:13px;
-          line-height:1.5;
-        "
-      >
-        If the button does not work, copy and paste
-        the following link into your browser:
-      </p>
-
-      <p
-        style="
-          color:#2563eb;
-          font-size:12px;
-          line-height:1.5;
-          word-break:break-all;
-        "
-      >
-        ${escapeHtml(invitationUrl)}
-      </p>
-
-      <p
-        style="
-          color:#9ca3af;
-          font-size:13px;
-          line-height:1.5;
-          margin-top:24px;
-        "
-      >
-        If you did not expect this invitation,
-        you can safely ignore this email.
-      </p>
-
-      <hr
-        style="
-          border:none;
-          border-top:1px solid #e5e7eb;
-          margin:30px 0;
-        "
-      />
-
-      <p
-        style="
-          color:#9ca3af;
-          font-size:12px;
-          text-align:center;
-          margin:0;
-        "
-      >
-        © 2026 ConstructIQ
-      </p>
-
-    </div>
-
-  </div>
-
-</body>
-</html>
-            `,
-          }),
-        }
-      );
-
-    // ============================================================
-    // 15. READ RESEND RESPONSE
-    // ============================================================
-
-    const emailResult =
-      await emailResponse.json();
-
-    // ============================================================
-    // 16. RESEND FAILED
-    //
-    // IMPORTANT:
-    // DO NOT DELETE THE INVITATION.
-    // ============================================================
-
-    if (!emailResponse.ok) {
-      console.error(
-        "RESEND EMAIL ERROR:",
-        emailResult
-      );
-
-      return NextResponse.json({
-        success: true,
-
-        email_sent: false,
-
-        email_error:
-          emailResult?.message ||
-          emailResult?.error ||
-          "Invitation email could not be sent.",
-
-        existing_user:
-          Boolean(existingAuthUser),
-
-        message:
-          "Invitation was created successfully, but the email could not be delivered. Copy the invitation link and send it manually.",
-
-        invitation_id:
-          invitation.id,
-
-        invitation_url:
-          invitationUrl,
-      });
-    }
-
-    // ============================================================
-    // 17. EMAIL SENT SUCCESSFULLY
-    // ============================================================
-
-    console.log(
-      "===================================="
-    );
-
-    console.log(
-      "INVITATION EMAIL SENT SUCCESSFULLY"
-    );
-
     console.log(
       "EMAIL:",
       normalizedEmail
     );
-
     console.log(
-      "INVITATION ID:",
-      invitation.id
+      "COMPANY:",
+      auth.companyId
     );
-
     console.log(
-      "EXISTING USER:",
-      Boolean(existingAuthUser)
+      "ROLE:",
+      role.name
     );
-
     console.log(
-      "RESEND RESULT:",
-      emailResult
+      "URL:",
+      invitationUrl
     );
-
     console.log(
       "===================================="
     );
 
     return NextResponse.json({
       success: true,
-
-      email_sent: true,
-
-      existing_user:
-        Boolean(existingAuthUser),
-
-      message:
-        `Invitation sent successfully to ${normalizedEmail}.`,
-
+      email_sent: false,
+      invitation_created: true,
       invitation_id:
         invitation.id,
-
       invitation_url:
         invitationUrl,
+      status: "Pending",
+      message:
+        "Invitation created successfully. Copy the invitation link and send it to the team member.",
     });
-
   } catch (error) {
     console.error(
       "TEAM INVITATION ERROR:",
@@ -857,41 +590,9 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Failed to process team invitation.",
+            : "Failed to process invitation.",
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
-}
-
-// ============================================================
-// HTML ESCAPING
-// ============================================================
-
-function escapeHtml(
-  value: string
-): string {
-  return value
-    .replace(
-      /&/g,
-      "&amp;"
-    )
-    .replace(
-      /</g,
-      "&lt;"
-    )
-    .replace(
-      />/g,
-      "&gt;"
-    )
-    .replace(
-      /"/g,
-      "&quot;"
-    )
-    .replace(
-      /'/g,
-      "&#039;"
-    );
 }

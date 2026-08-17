@@ -1,68 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import {
+  Suspense,
+  useState,
+} from "react";
+
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+
 import { supabase } from "@/lib/supabase";
 
-export default function SignupPage() {
+function SignupPageContent() {
   const router = useRouter();
 
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const searchParams =
+    useSearchParams();
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const invitationId =
+    searchParams.get(
+      "invitation_id"
+    );
 
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const [fullName, setFullName] =
+    useState("");
+
+  const [email, setEmail] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
+
+  const [confirmPassword, setConfirmPassword] =
+    useState("");
+
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [showConfirmPassword, setShowConfirmPassword] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [errorMessage, setErrorMessage] =
+    useState("");
+
+  const [successMessage, setSuccessMessage] =
+    useState("");
 
   // ============================================================
-  // Get invitation ID from URL
+  // HANDLE SIGNUP
   // ============================================================
 
-  function getInvitationId() {
-    if (typeof window === "undefined") {
-      return null;
-    }
-
-    return new URLSearchParams(
-      window.location.search
-    ).get("invitation_id");
-  }
-
-  // ============================================================
-  // Handle Signup
-  // ============================================================
-
-  async function handleSignup(e: React.FormEvent) {
+  async function handleSignup(
+    e: React.FormEvent
+  ) {
     e.preventDefault();
 
     setErrorMessage("");
     setSuccessMessage("");
 
     // ----------------------------------------------------------
-    // Preserve invitation ID before signup
-    // ----------------------------------------------------------
-
-    const invitationId = getInvitationId();
-
-    console.log(
-      "SIGNUP INVITATION ID:",
-      invitationId
-    );
-
-    // ----------------------------------------------------------
     // Validate passwords
     // ----------------------------------------------------------
 
-    if (password !== confirmPassword) {
+    if (
+      password !==
+      confirmPassword
+    ) {
       setErrorMessage(
         "Passwords do not match."
       );
+
       return;
     }
 
@@ -70,28 +83,69 @@ export default function SignupPage() {
       setErrorMessage(
         "Password must be at least 6 characters."
       );
+
       return;
     }
+
+    // ----------------------------------------------------------
+    // Normalize email
+    // ----------------------------------------------------------
+
+    const normalizedEmail =
+      email
+        .trim()
+        .toLowerCase();
+
+    // ----------------------------------------------------------
+    // Start loading
+    // ----------------------------------------------------------
 
     setLoading(true);
 
     try {
+      console.log(
+        "===================================="
+      );
+
+      console.log(
+        "SIGNUP START"
+      );
+
+      console.log(
+        "INVITATION ID:",
+        invitationId
+      );
+
+      console.log(
+        "EMAIL:",
+        normalizedEmail
+      );
+
+      console.log(
+        "===================================="
+      );
+
       // ========================================================
-      // Create Supabase account
+      // CREATE SUPABASE ACCOUNT
       // ========================================================
 
       const {
         data,
         error,
-      } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-        options: {
-          data: {
-            full_name: fullName.trim(),
+      } =
+        await supabase.auth.signUp({
+          email:
+            normalizedEmail,
+
+          password,
+
+          options: {
+            data: {
+              full_name:
+                fullName.trim(),
+            },
           },
-        },
-      });
+        });
 
       console.log(
         "SIGNUP DATA:",
@@ -104,7 +158,7 @@ export default function SignupPage() {
       );
 
       // ========================================================
-      // Signup error
+      // SIGNUP ERROR
       // ========================================================
 
       if (error) {
@@ -113,30 +167,34 @@ export default function SignupPage() {
           error
         );
 
+        const errorText =
+          error.message
+            .toLowerCase();
+
         // ------------------------------------------------------
-        // If this is an invitation and the Auth user already
-        // exists, don't send them to Create Company.
-        //
-        // Their invitation still needs to be accepted.
+        // EXISTING USER
         // ------------------------------------------------------
 
         if (
-          invitationId &&
-          (
-            error.message
-              .toLowerCase()
-              .includes("already registered") ||
-            error.message
-              .toLowerCase()
-              .includes("already exists") ||
-            error.message
-              .toLowerCase()
-              .includes("user already registered")
+          errorText.includes(
+            "already registered"
+          ) ||
+          errorText.includes(
+            "already exists"
+          ) ||
+          errorText.includes(
+            "user already registered"
           )
         ) {
-          setErrorMessage(
-            "An account already exists for this email address. Please sign in using this email and accept the invitation."
-          );
+          if (invitationId) {
+            setErrorMessage(
+              "An account already exists for this email. Please sign in using this email to continue with the invitation."
+            );
+          } else {
+            setErrorMessage(
+              "An account already exists for this email. Please sign in instead."
+            );
+          }
 
           return;
         }
@@ -149,7 +207,7 @@ export default function SignupPage() {
       }
 
       // ========================================================
-      // No user returned
+      // USER WAS NOT CREATED
       // ========================================================
 
       if (!data.user) {
@@ -169,44 +227,67 @@ export default function SignupPage() {
       // INVITED USER
       // ========================================================
       //
-      // If signup created a session immediately, we can accept
-      // the invitation right away.
+      // If invitation_id exists:
+      //
+      // NEVER send the user to /create-company.
+      //
+      // They must continue through the invitation flow.
       // ========================================================
 
-      if (
-        invitationId &&
-        data.session
-      ) {
-        console.log(
-          "INVITED USER SIGNUP SUCCESS"
-        );
+      if (invitationId) {
+        // ------------------------------------------------------
+        // CASE 1:
+        // Supabase created a session immediately.
+        // ------------------------------------------------------
+
+        if (data.session) {
+          console.log(
+            "INVITED USER HAS SESSION"
+          );
+
+          console.log(
+            "GOING TO ACCEPT INVITATION"
+          );
+
+          router.replace(
+            `/app/accept-invitation?invitation_id=${encodeURIComponent(
+              invitationId
+            )}`
+          );
+
+          router.refresh();
+
+          return;
+        }
+
+        // ------------------------------------------------------
+        // CASE 2:
+        // Email confirmation required.
+        // ------------------------------------------------------
 
         console.log(
-          "REDIRECTING TO ACCEPT INVITATION"
+          "INVITED USER NEEDS EMAIL CONFIRMATION"
         );
 
-        router.replace(
-          `/app/accept-invitation?invitation_id=${encodeURIComponent(
-            invitationId
-          )}`
+        setSuccessMessage(
+          "Your account has been created. Please verify your email, then return to the invitation link to join the company."
         );
-
-        router.refresh();
 
         return;
       }
 
       // ========================================================
-      // NORMAL USER WITH SESSION
+      // NORMAL USER
       // ========================================================
       //
-      // No invitation means this is a normal new account.
-      // They can create their company.
+      // No invitation_id means this is a normal signup.
+      //
+      // Normal users can create their own company.
       // ========================================================
 
       if (data.session) {
         console.log(
-          "NORMAL SIGNUP SUCCESS"
+          "NORMAL USER SIGNUP"
         );
 
         router.replace(
@@ -219,22 +300,12 @@ export default function SignupPage() {
       }
 
       // ========================================================
-      // EMAIL CONFIRMATION REQUIRED
-      // ========================================================
-      //
-      // If Supabase requires email confirmation, don't pretend
-      // the invitation has already been accepted.
+      // NORMAL USER WITH EMAIL CONFIRMATION
       // ========================================================
 
-      if (invitationId) {
-        setSuccessMessage(
-          "Your account has been created. Please check your email to verify your account. After verification, return to the invitation link to join the company."
-        );
-      } else {
-        setSuccessMessage(
-          "Account created successfully! Please check your email to verify your account."
-        );
-      }
+      setSuccessMessage(
+        "Account created successfully! Please check your email to verify your account."
+      );
 
     } catch (err) {
       console.error(
@@ -243,21 +314,19 @@ export default function SignupPage() {
       );
 
       setErrorMessage(
-        "Something went wrong. Please try again."
+        "Something went wrong while creating your account. Please try again."
       );
+
     } finally {
       setLoading(false);
     }
   }
 
   // ============================================================
-  // Sign In
+  // GO TO LOGIN
   // ============================================================
 
-  function handleSignIn() {
-    const invitationId =
-      getInvitationId();
-
+  function goToLogin() {
     if (invitationId) {
       router.push(
         `/login?invitation_id=${encodeURIComponent(
@@ -268,7 +337,9 @@ export default function SignupPage() {
       return;
     }
 
-    router.push("/login");
+    router.push(
+      "/login"
+    );
   }
 
   // ============================================================
@@ -281,7 +352,7 @@ export default function SignupPage() {
       <div className="w-full max-w-md">
 
         {/* ====================================================
-            Brand
+            BRAND
         ==================================================== */}
 
         <div className="text-center mb-8">
@@ -301,7 +372,28 @@ export default function SignupPage() {
         </div>
 
         {/* ====================================================
-            Signup Card
+            INVITATION NOTICE
+        ==================================================== */}
+
+        {invitationId && (
+          <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
+
+            <p className="font-semibold text-blue-800">
+              You&apos;ve been invited to join a company
+            </p>
+
+            <p className="text-sm text-blue-700 mt-1">
+              Create your account below. After
+              signup, you&apos;ll automatically be
+              connected to the company that invited
+              you.
+            </p>
+
+          </div>
+        )}
+
+        {/* ====================================================
+            SIGNUP CARD
         ==================================================== */}
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
@@ -313,21 +405,27 @@ export default function SignupPage() {
             </h2>
 
             <p className="text-gray-500 mt-1">
-              Start managing your construction projects.
+              {invitationId
+                ? "Create your account to accept the invitation."
+                : "Start managing your construction projects."}
             </p>
 
           </div>
 
           {/* ==================================================
-              Signup Form
+              FORM
           ================================================== */}
 
           <form
-            onSubmit={handleSignup}
+            onSubmit={
+              handleSignup
+            }
             className="space-y-5"
           >
 
-            {/* Full Name */}
+            {/* ==================================================
+                FULL NAME
+            ================================================== */}
 
             <div>
 
@@ -355,7 +453,9 @@ export default function SignupPage() {
 
             </div>
 
-            {/* Email */}
+            {/* ==================================================
+                EMAIL
+            ================================================== */}
 
             <div>
 
@@ -381,9 +481,18 @@ export default function SignupPage() {
                 className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
               />
 
+              {invitationId && (
+                <p className="text-xs text-blue-600 mt-2">
+                  Use the email address that received
+                  the invitation.
+                </p>
+              )}
+
             </div>
 
-            {/* Password */}
+            {/* ==================================================
+                PASSWORD
+            ================================================== */}
 
             <div>
 
@@ -438,7 +547,9 @@ export default function SignupPage() {
 
             </div>
 
-            {/* Confirm Password */}
+            {/* ==================================================
+                CONFIRM PASSWORD
+            ================================================== */}
 
             <div>
 
@@ -461,7 +572,9 @@ export default function SignupPage() {
                   required
                   autoComplete="new-password"
                   placeholder="Confirm your password"
-                  value={confirmPassword}
+                  value={
+                    confirmPassword
+                  }
                   onChange={(e) =>
                     setConfirmPassword(
                       e.target.value
@@ -489,20 +602,17 @@ export default function SignupPage() {
             </div>
 
             {/* ==================================================
-                Error
+                ERROR
             ================================================== */}
 
             {errorMessage && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
 
-                {errorMessage}
+                <p>
+                  {errorMessage}
+                </p>
 
-                {/* ------------------------------------------------
-                    If invited user already has an Auth account,
-                    give them a direct path back to Login.
-                ------------------------------------------------ */}
-
-                {getInvitationId() &&
+                {invitationId &&
                   errorMessage
                     .toLowerCase()
                     .includes(
@@ -510,8 +620,10 @@ export default function SignupPage() {
                     ) && (
                     <button
                       type="button"
-                      onClick={handleSignIn}
-                      className="block mt-3 font-semibold text-red-700 underline hover:text-red-900"
+                      onClick={
+                        goToLogin
+                      }
+                      className="mt-3 font-semibold text-red-700 underline hover:text-red-900"
                     >
                       Sign in to continue with your invitation →
                     </button>
@@ -521,19 +633,35 @@ export default function SignupPage() {
             )}
 
             {/* ==================================================
-                Success
+                SUCCESS
             ================================================== */}
 
             {successMessage && (
-              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-4 text-sm text-green-700">
 
                 {successMessage}
+
+                {invitationId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      router.push(
+                        `/login?invitation_id=${encodeURIComponent(
+                          invitationId
+                        )}`
+                      );
+                    }}
+                    className="block mt-3 font-semibold underline"
+                  >
+                    Continue to Sign In →
+                  </button>
+                )}
 
               </div>
             )}
 
             {/* ==================================================
-                Create Account
+                CREATE ACCOUNT
             ================================================== */}
 
             <button
@@ -543,13 +671,15 @@ export default function SignupPage() {
             >
               {loading
                 ? "Creating Account..."
+                : invitationId
+                ? "Create Account & Join Company"
                 : "Create Account"}
             </button>
 
           </form>
 
           {/* ====================================================
-              Divider
+              DIVIDER
           ==================================================== */}
 
           <div className="flex items-center gap-3 my-7">
@@ -565,12 +695,14 @@ export default function SignupPage() {
           </div>
 
           {/* ====================================================
-              Sign In
+              SIGN IN
           ==================================================== */}
 
           <button
             type="button"
-            onClick={handleSignIn}
+            onClick={
+              goToLogin
+            }
             className="w-full rounded-lg border border-blue-600 bg-white px-4 py-3 text-center font-semibold text-blue-600 transition hover:bg-blue-50"
           >
             Sign In
@@ -579,7 +711,7 @@ export default function SignupPage() {
         </div>
 
         {/* ====================================================
-            Footer
+            FOOTER
         ==================================================== */}
 
         <p className="text-center text-sm text-gray-400 mt-6">
@@ -589,5 +721,38 @@ export default function SignupPage() {
       </div>
 
     </main>
+  );
+}
+
+// ============================================================
+// PAGE WRAPPER
+//
+// Next.js requires useSearchParams() to be rendered inside
+// a Suspense boundary during production builds.
+// ============================================================
+
+export default function SignupPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+
+          <div className="text-center">
+
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+              <div className="h-6 w-6 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+            </div>
+
+            <p className="text-gray-500">
+              Loading...
+            </p>
+
+          </div>
+
+        </main>
+      }
+    >
+      <SignupPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -18,294 +22,270 @@ type Member = {
   is_owner: boolean;
 };
 
+type Invitation = {
+  id: string;
+  full_name: string | null;
+  email: string;
+  role_id: string | null;
+  company_id: string;
+  status: string;
+  created_at: string;
+  invitation_url: string;
+};
+
 export default function CompanyTeamPage() {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [members, setMembers] =
+    useState<Member[]>([]);
 
-  const [loading, setLoading] = useState(true);
-  const [rolesLoading, setRolesLoading] = useState(true);
+  const [invitations, setInvitations] =
+    useState<Invitation[]>([]);
 
-  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [roles, setRoles] =
+    useState<Role[]>([]);
 
-  const [error, setError] = useState("");
-  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [loading, setLoading] =
+    useState(true);
 
-  // ============================================================
-  // LOAD PAGE
-  // ============================================================
+  const [error, setError] =
+    useState("");
 
-  const loadPage = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  const [companyId, setCompanyId] =
+    useState<string | null>(null);
 
-    try {
-      // --------------------------------------------------------
-      // 1. Get logged-in user
-      // --------------------------------------------------------
+  const [updatingRole, setUpdatingRole] =
+    useState<string | null>(null);
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
+  const [resending, setResending] =
+    useState<string | null>(null);
 
-      console.log("USER:", user);
-      console.log("USER ERROR:", userError);
+  const [copiedId, setCopiedId] =
+    useState<string | null>(null);
 
-      if (userError || !user) {
-        setError("You are not logged in.");
-        return;
-      }
+  const loadPage = useCallback(
+    async () => {
+      setLoading(true);
+      setError("");
 
-      // --------------------------------------------------------
-      // 2. Get current user's profile
-      // --------------------------------------------------------
+      try {
+        /*
+         * Current user
+         */
 
-      const {
-        data: profile,
-        error: profileError,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "id, full_name, role_id, company_id, created_at, is_owner"
-        )
-        .eq("id", user.id)
-        .single();
-
-      console.log("PROFILE:", profile);
-      console.log("PROFILE ERROR:", profileError);
-
-      if (profileError) {
-        setError(
-          `Unable to load company information: ${profileError.message}`
-        );
-        return;
-      }
-
-      if (!profile?.company_id) {
-        setError(
-          "Your account is not connected to a company."
-        );
-        return;
-      }
-
-      setCompanyId(profile.company_id);
-
-      // --------------------------------------------------------
-      // 3. Determine Owner / Admin
-      // --------------------------------------------------------
-
-      const isOwner = profile.is_owner === true;
-
-      let isAdmin = false;
-
-      if (profile.role_id) {
         const {
-          data: currentRole,
-          error: currentRoleError,
-        } = await supabase
-          .from("roles")
-          .select("id, name")
-          .eq("id", profile.role_id)
-          .single();
+          data: { user },
+          error: userError,
+        } =
+          await supabase.auth.getUser();
 
-        console.log(
-          "CURRENT ROLE:",
-          currentRole
-        );
-
-        if (currentRoleError) {
-          console.error(
-            "CURRENT ROLE ERROR:",
-            currentRoleError
+        if (
+          userError ||
+          !user
+        ) {
+          setError(
+            "You are not logged in."
           );
+          return;
         }
 
-        isAdmin =
-          currentRole?.name?.trim().toLowerCase() ===
-          "admin";
-      }
+        /*
+         * Profile
+         */
 
-      console.log(
-        "===================================="
-      );
-      console.log("TEAM ACCESS CHECK");
-      console.log("IS OWNER:", isOwner);
-      console.log("IS ADMIN:", isAdmin);
-      console.log("ROLE ID:", profile.role_id);
-      console.log(
-        "===================================="
-      );
+        const {
+          data: profile,
+          error: profileError,
+        } =
+          await supabase
+            .from("profiles")
+            .select(
+              "id, full_name, role_id, company_id, created_at, is_owner"
+            )
+            .eq("id", user.id)
+            .single();
 
-      // --------------------------------------------------------
-      // 4. Only Owner/Admin can access team page
-      // --------------------------------------------------------
+        if (profileError) {
+          setError(
+            profileError.message
+          );
+          return;
+        }
 
-      if (!isOwner && !isAdmin) {
-        window.location.href = "/app/projects";
-        return;
-      }
+        if (!profile?.company_id) {
+          setError(
+            "Your account is not connected to a company."
+          );
+          return;
+        }
 
-      // --------------------------------------------------------
-      // 5. Load roles
-      // --------------------------------------------------------
-
-      setRolesLoading(true);
-
-      const {
-        data: rolesData,
-        error: rolesError,
-      } = await supabase
-        .from("roles")
-        .select("id, name")
-        .order("name");
-
-      console.log("ROLES:", rolesData);
-      console.log("ROLES ERROR:", rolesError);
-
-      if (rolesError) {
-        setError(
-          `Unable to load roles: ${rolesError.message}`
+        setCompanyId(
+          profile.company_id
         );
-        return;
-      }
 
-      setRoles(rolesData || []);
-      setRolesLoading(false);
+        /*
+         * Check owner/admin
+         */
 
-      // --------------------------------------------------------
-      // 6. IMPORTANT:
-      // Always get fresh members from Supabase
-      // --------------------------------------------------------
+        let isAdmin = false;
 
-      console.log(
-        "===================================="
-      );
-      console.log("LOADING FRESH TEAM MEMBERS");
-      console.log("COMPANY:", profile.company_id);
-      console.log(
-        "===================================="
-      );
+        if (profile.role_id) {
+          const {
+            data: currentRole,
+          } =
+            await supabase
+              .from("roles")
+              .select(
+                "id, name"
+              )
+              .eq(
+                "id",
+                profile.role_id
+              )
+              .maybeSingle();
 
-      const {
-        data: membersData,
-        error: membersError,
-      } = await supabase
-        .from("profiles")
-        .select(
-          "id, full_name, role_id, company_id, created_at, is_owner"
-        )
-        .eq("company_id", profile.company_id)
-        .order("created_at", {
-          ascending: true,
-        });
+          isAdmin =
+            currentRole?.name
+              ?.trim()
+              .toLowerCase() ===
+            "admin";
+        }
 
-      console.log(
-        "FRESH MEMBERS DATA:",
-        membersData
-      );
+        if (
+          profile.is_owner !== true &&
+          !isAdmin
+        ) {
+          window.location.href =
+            "/app/projects";
+          return;
+        }
 
-      console.log(
-        "FRESH MEMBERS ERROR:",
-        membersError
-      );
+        /*
+         * Roles
+         */
 
-      if (membersError) {
+        const {
+          data: rolesData,
+          error: rolesError,
+        } =
+          await supabase
+            .from("roles")
+            .select(
+              "id, name"
+            )
+            .order("name");
+
+        if (rolesError) {
+          setError(
+            rolesError.message
+          );
+          return;
+        }
+
+        setRoles(
+          rolesData || []
+        );
+
+        /*
+         * Active members ONLY
+         */
+
+        const {
+          data: membersData,
+          error: membersError,
+        } =
+          await supabase
+            .from("profiles")
+            .select(
+              "id, full_name, role_id, company_id, created_at, is_owner"
+            )
+            .eq(
+              "company_id",
+              profile.company_id
+            )
+            .order(
+              "created_at",
+              {
+                ascending: true,
+              }
+            );
+
+        if (membersError) {
+          setError(
+            membersError.message
+          );
+          return;
+        }
+
+        setMembers(
+          membersData || []
+        );
+
+        /*
+         * Pending invitations
+         *
+         * Loaded from server API because
+         * invitations are managed securely
+         * with the service role.
+         */
+
+        const invitationResponse =
+          await fetch(
+            "/api/team/invite",
+            {
+              method: "GET",
+              cache: "no-store",
+            }
+          );
+
+        const invitationResult =
+          await invitationResponse.json();
+
+        if (
+          !invitationResponse.ok
+        ) {
+          setError(
+            invitationResult?.error ||
+              "Unable to load invitations."
+          );
+          return;
+        }
+
+        setInvitations(
+          (invitationResult?.invitations ||
+            []
+          ).filter(
+            (item: Invitation) =>
+              item.status ===
+              "Pending"
+          )
+        );
+      } catch (err: any) {
         console.error(
-          "MEMBERS QUERY FAILED:",
-          membersError
+          "TEAM PAGE ERROR:",
+          err
         );
 
         setError(
-          `Unable to load team members: ${membersError.message}`
+          err?.message ||
+            "Unable to load the team."
         );
-
-        return;
+      } finally {
+        setLoading(false);
       }
-
-      // --------------------------------------------------------
-      // 7. Replace local list completely
-      // --------------------------------------------------------
-
-      setMembers(membersData || []);
-
-      console.log(
-        "TEAM MEMBERS STATE UPDATED:",
-        membersData?.length || 0
-      );
-
-    } catch (err: any) {
-      console.error(
-        "===================================="
-      );
-
-      console.error(
-        "TEAM PAGE ERROR"
-      );
-
-      console.error(
-        "ERROR:",
-        err
-      );
-
-      console.error(
-        "MESSAGE:",
-        err?.message
-      );
-
-      console.error(
-        "DETAILS:",
-        err?.details
-      );
-
-      console.error(
-        "HINT:",
-        err?.hint
-      );
-
-      console.error(
-        "===================================="
-      );
-
-      setError(
-        err?.message ||
-          "Something went wrong while loading the team."
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // ============================================================
-  // INITIAL LOAD
-  // ============================================================
+    },
+    []
+  );
 
   useEffect(() => {
     loadPage();
   }, [loadPage]);
 
-  // ============================================================
-  // REFRESH WHEN USER RETURNS TO THIS PAGE
-  // ============================================================
+  /*
+   * Refresh when returning to page
+   */
 
   useEffect(() => {
     function handleFocus() {
-      console.log(
-        "WINDOW FOCUSED - REFRESHING TEAM MEMBERS"
-      );
-
       loadPage();
-    }
-
-    function handleVisibilityChange() {
-      if (
-        document.visibilityState === "visible"
-      ) {
-        console.log(
-          "PAGE VISIBLE - REFRESHING TEAM MEMBERS"
-        );
-
-        loadPage();
-      }
     }
 
     window.addEventListener(
@@ -313,114 +293,17 @@ export default function CompanyTeamPage() {
       handleFocus
     );
 
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibilityChange
-    );
-
     return () => {
       window.removeEventListener(
         "focus",
         handleFocus
       );
-
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange
-      );
     };
   }, [loadPage]);
 
-  // ============================================================
-  // UPDATE ROLE
-  // ============================================================
-
-  async function updateRole(
-    profileId: string,
-    roleId: string
-  ) {
-    if (!roleId || !companyId) {
-      return;
-    }
-
-    setUpdatingRole(profileId);
-
-    try {
-      console.log(
-        "===================================="
-      );
-
-      console.log(
-        "UPDATING ROLE"
-      );
-
-      console.log(
-        "PROFILE ID:",
-        profileId
-      );
-
-      console.log(
-        "NEW ROLE ID:",
-        roleId
-      );
-
-      console.log(
-        "COMPANY ID:",
-        companyId
-      );
-
-      console.log(
-        "===================================="
-      );
-
-      const {
-        error: updateError,
-      } = await supabase
-        .from("profiles")
-        .update({
-          role_id: roleId,
-        })
-        .eq("id", profileId)
-        .eq("company_id", companyId);
-
-      if (updateError) {
-        console.error(
-          "ROLE UPDATE ERROR:",
-          updateError
-        );
-
-        alert(
-          `Role update failed: ${updateError.message}`
-        );
-
-        return;
-      }
-
-      // Reload from database
-      await loadPage();
-
-      console.log(
-        "ROLE UPDATE COMPLETE"
-      );
-
-    } catch (err: any) {
-      console.error(
-        "ROLE UPDATE EXCEPTION:",
-        err
-      );
-
-      alert(
-        err?.message ||
-          "Unable to update the role."
-      );
-    } finally {
-      setUpdatingRole(null);
-    }
-  }
-
-  // ============================================================
-  // ROLE NAME
-  // ============================================================
+  /*
+   * Role name
+   */
 
   function getRoleName(
     roleId: string | null
@@ -429,52 +312,142 @@ export default function CompanyTeamPage() {
       return "No Role Assigned";
     }
 
-    const role = roles.find(
-      (item) => item.id === roleId
-    );
-
     return (
-      role?.name ||
+      roles.find(
+        (role) =>
+          role.id === roleId
+      )?.name ||
       "No Role Assigned"
     );
   }
 
-  // ============================================================
-  // LOADING
-  // ============================================================
+  /*
+   * Update role
+   */
+
+  async function updateRole(
+    memberId: string,
+    roleId: string
+  ) {
+    if (!companyId) {
+      return;
+    }
+
+    setUpdatingRole(memberId);
+
+    try {
+      const {
+        error: updateError,
+      } =
+        await supabase
+          .from("profiles")
+          .update({
+            role_id: roleId,
+          })
+          .eq(
+            "id",
+            memberId
+          )
+          .eq(
+            "company_id",
+            companyId
+          );
+
+      if (updateError) {
+        alert(
+          updateError.message
+        );
+        return;
+      }
+
+      await loadPage();
+    } finally {
+      setUpdatingRole(null);
+    }
+  }
+
+  /*
+   * Copy / resend invitation
+   */
+
+  async function resendInvitation(
+    invitationId: string
+  ) {
+    setResending(
+      invitationId
+    );
+
+    try {
+      const response =
+        await fetch(
+          "/api/team/invite",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              action: "resend",
+              invitation_id:
+                invitationId,
+            }),
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        alert(
+          result?.error ||
+            "Unable to resend invitation."
+        );
+        return;
+      }
+
+      await navigator.clipboard.writeText(
+        result.invitation_url
+      );
+
+      setCopiedId(
+        invitationId
+      );
+
+      setTimeout(() => {
+        setCopiedId(null);
+      }, 2500);
+    } catch (err) {
+      console.error(
+        "RESEND ERROR:",
+        err
+      );
+
+      alert(
+        "Unable to copy the invitation link."
+      );
+    } finally {
+      setResending(null);
+    }
+  }
 
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
-
         <div className="max-w-7xl mx-auto">
-
           <div className="bg-white rounded-2xl border p-10 text-center">
-
-            <p className="text-gray-500">
-              Loading team members...
-            </p>
-
+            Loading team members...
           </div>
-
         </div>
-
       </main>
     );
   }
 
-  // ============================================================
-  // ERROR
-  // ============================================================
-
   if (error) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
-
         <div className="max-w-7xl mx-auto">
-
           <div className="bg-red-50 border border-red-200 rounded-2xl p-8">
-
             <h1 className="text-2xl font-bold text-red-700">
               Team Members
             </h1>
@@ -485,36 +458,29 @@ export default function CompanyTeamPage() {
 
             <button
               onClick={loadPage}
-              className="mt-5 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-semibold"
+              className="mt-5 bg-blue-600 text-white px-5 py-2.5 rounded-lg font-semibold"
             >
               Try Again
             </button>
-
           </div>
-
         </div>
-
       </main>
     );
   }
 
-  // ============================================================
-  // PAGE
-  // ============================================================
+  const totalMembers =
+    members.length +
+    invitations.length;
 
   return (
     <main className="min-h-screen bg-gray-50 p-8">
-
       <div className="max-w-7xl mx-auto">
 
-        {/* ======================================================
-            HEADER
-        ====================================================== */}
+        {/* HEADER */}
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
 
           <div>
-
             <h1 className="text-4xl font-bold text-gray-900">
               Team Members
             </h1>
@@ -522,42 +488,32 @@ export default function CompanyTeamPage() {
             <p className="text-gray-500 mt-2">
               Manage users, roles, and access for your company.
             </p>
-
           </div>
 
           <Link
             href="/app/company/team/new"
-            className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold shadow-sm"
+            className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold"
           >
             + Add Team Member
           </Link>
 
         </div>
 
-        {/* ======================================================
-            SUMMARY
-        ====================================================== */}
+        {/* SUMMARY */}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
 
-          {/* TOTAL */}
-
-          <div className="bg-white border rounded-2xl p-6 shadow-sm">
-
+          <div className="bg-white border rounded-2xl p-6">
             <p className="text-sm text-gray-500">
               Total Members
             </p>
 
             <p className="text-3xl font-bold text-gray-900 mt-2">
-              {members.length}
+              {totalMembers}
             </p>
-
           </div>
 
-          {/* ACTIVE */}
-
-          <div className="bg-white border rounded-2xl p-6 shadow-sm">
-
+          <div className="bg-white border rounded-2xl p-6">
             <p className="text-sm text-gray-500">
               Active Members
             </p>
@@ -565,96 +521,220 @@ export default function CompanyTeamPage() {
             <p className="text-3xl font-bold text-green-600 mt-2">
               {members.length}
             </p>
-
           </div>
 
-          {/* COMPANY */}
+          <div className="bg-white border rounded-2xl p-6">
+            <p className="text-sm text-gray-500">
+              Pending Invitations
+            </p>
 
-          <div className="bg-white border rounded-2xl p-6 shadow-sm">
+            <p className="text-3xl font-bold text-yellow-600 mt-2">
+              {invitations.length}
+            </p>
+          </div>
 
+          <div className="bg-white border rounded-2xl p-6">
             <p className="text-sm text-gray-500">
               Company
             </p>
 
-            <p className="text-sm font-mono text-gray-700 mt-3 truncate">
+            <p className="text-xs font-mono text-gray-700 mt-3 truncate">
               {companyId}
             </p>
-
           </div>
 
         </div>
 
-        {/* ======================================================
-            TEAM TABLE
-        ====================================================== */}
+        {/* ACTIVE MEMBERS */}
 
-        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden mb-8">
 
-          {/* TABLE HEADER */}
+          <div className="px-6 py-5 border-b flex items-center justify-between">
 
-          <div className="px-6 py-5 border-b">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">
+                Active Members
+              </h2>
 
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <h2 className="text-xl font-bold text-gray-900">
-                  Company Team
-                </h2>
-
-                <p className="text-sm text-gray-500 mt-1">
-                  Members currently assigned to your company.
-                </p>
-
-              </div>
-
-              <button
-                onClick={loadPage}
-                disabled={loading}
-                className="border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-              >
-                Refresh
-              </button>
-
+              <p className="text-sm text-gray-500 mt-1">
+                Users who have accepted their invitation.
+              </p>
             </div>
+
+            <button
+              onClick={loadPage}
+              className="border border-gray-300 px-4 py-2 rounded-lg text-sm"
+            >
+              Refresh
+            </button>
 
           </div>
 
-          {/* ====================================================
-              NO MEMBERS
-          ==================================================== */}
-
           {members.length === 0 ? (
+            <div className="p-10 text-center text-gray-500">
+              No active members yet.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
 
-            <div className="p-12 text-center">
+              <table className="w-full">
 
-              <div className="text-5xl mb-4">
-                👥
-              </div>
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
+                      Member
+                    </th>
 
-              <h3 className="text-xl font-bold text-gray-900">
-                No team members yet
-              </h3>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
+                      Role
+                    </th>
 
-              <p className="text-gray-500 mt-2">
-                Invite your first team member to start collaborating.
-              </p>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
+                      Status
+                    </th>
 
-              <Link
-                href="/app/company/team/new"
-                className="inline-block mt-6 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold"
-              >
-                + Invite Team Member
-              </Link>
+                    <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody>
+
+                  {members.map(
+                    (member) => (
+                      <tr
+                        key={member.id}
+                        className="border-b last:border-b-0"
+                      >
+
+                        <td className="px-6 py-5">
+
+                          <div className="flex items-center gap-3">
+
+                            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
+                              {(member.full_name ||
+                                "U")
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
+
+                            <div>
+                              <p className="font-semibold text-gray-900">
+                                {member.full_name ||
+                                  "No Name"}
+                              </p>
+
+                              <p className="text-xs text-gray-400">
+                                Team Member
+                              </p>
+                            </div>
+
+                          </div>
+
+                        </td>
+
+                        <td className="px-6 py-5">
+
+                          {member.is_owner ? (
+                            <span className="inline-flex px-3 py-2 rounded-lg bg-purple-100 text-purple-800 font-semibold text-sm">
+                              👑 Owner
+                            </span>
+                          ) : (
+                            <select
+                              value={
+                                member.role_id ||
+                                ""
+                              }
+                              disabled={
+                                updatingRole ===
+                                member.id
+                              }
+                              onChange={(e) =>
+                                updateRole(
+                                  member.id,
+                                  e.target.value
+                                )
+                              }
+                              className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm min-w-[180px]"
+                            >
+                              <option value="">
+                                No Role Assigned
+                              </option>
+
+                              {roles.map(
+                                (role) => (
+                                  <option
+                                    key={
+                                      role.id
+                                    }
+                                    value={
+                                      role.id
+                                    }
+                                  >
+                                    {role.name}
+                                  </option>
+                                )
+                              )}
+                            </select>
+                          )}
+
+                        </td>
+
+                        <td className="px-6 py-5">
+
+                          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-sm font-medium">
+                            <span className="w-2 h-2 rounded-full bg-green-500" />
+                            Active
+                          </span>
+
+                        </td>
+
+                        <td className="px-6 py-5">
+
+                          <Link
+                            href={`/app/company/team/${member.id}`}
+                            className="text-blue-600 hover:text-blue-800 font-semibold text-sm"
+                          >
+                            Edit
+                          </Link>
+
+                        </td>
+
+                      </tr>
+                    )
+                  )}
+
+                </tbody>
+
+              </table>
 
             </div>
+          )}
 
+        </div>
+
+        {/* PENDING INVITATIONS */}
+
+        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+
+          <div className="px-6 py-5 border-b">
+
+            <h2 className="text-xl font-bold text-gray-900">
+              Pending Invitations
+            </h2>
+
+            <p className="text-sm text-gray-500 mt-1">
+              People who have been invited but have not joined yet.
+            </p>
+
+          </div>
+
+          {invitations.length === 0 ? (
+            <div className="p-10 text-center text-gray-500">
+              No pending invitations.
+            </div>
           ) : (
-
-            /* ==================================================
-               TABLE
-            ================================================== */
-
             <div className="overflow-x-auto">
 
               <table className="w-full">
@@ -676,7 +756,7 @@ export default function CompanyTeamPage() {
                     </th>
 
                     <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
-                      Actions
+                      Action
                     </th>
 
                   </tr>
@@ -685,155 +765,73 @@ export default function CompanyTeamPage() {
 
                 <tbody>
 
-                  {members.map(
-                    (member) => (
-
+                  {invitations.map(
+                    (invitation) => (
                       <tr
-                        key={member.id}
-                        className="border-b last:border-b-0 hover:bg-gray-50"
+                        key={
+                          invitation.id
+                        }
+                        className="border-b last:border-b-0"
                       >
 
-                        {/* MEMBER */}
-
                         <td className="px-6 py-5">
 
-                          <div className="flex items-center gap-3">
+                          <p className="font-semibold text-gray-900">
+                            {invitation.full_name ||
+                              "Invited User"}
+                          </p>
 
-                            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
-
-                              {(member.full_name || "U")
-                                .charAt(0)
-                                .toUpperCase()}
-
-                            </div>
-
-                            <div>
-
-                              <p className="font-semibold text-gray-900">
-
-                                {member.full_name ||
-                                  "No Name"}
-
-                              </p>
-
-                              <p className="text-xs text-gray-400">
-                                Team Member
-                              </p>
-
-                            </div>
-
-                          </div>
+                          <p className="text-sm text-gray-500">
+                            {invitation.email}
+                          </p>
 
                         </td>
 
-                        {/* ROLE */}
-
                         <td className="px-6 py-5">
 
-                          {member.is_owner ? (
-
-                            <div>
-
-                              <span className="inline-flex items-center px-3 py-2 rounded-lg bg-purple-100 text-purple-800 font-semibold text-sm">
-                                👑 Owner
-                              </span>
-
-                              <p className="text-xs text-gray-400 mt-1">
-                                Permanent company owner
-                              </p>
-
-                            </div>
-
-                          ) : (
-
-                            <div className="flex items-center gap-3">
-
-                              <select
-                                value={
-                                  member.role_id ??
-                                  ""
-                                }
-                                disabled={
-                                  updatingRole ===
-                                    member.id ||
-                                  rolesLoading
-                                }
-                                onChange={(e) =>
-                                  updateRole(
-                                    member.id,
-                                    e.target.value
-                                  )
-                                }
-                                className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm min-w-[180px] focus:ring-2 focus:ring-blue-500 outline-none disabled:bg-gray-100"
-                              >
-
-                                <option value="">
-                                  No Role Assigned
-                                </option>
-
-                                {roles.map(
-                                  (role) => (
-
-                                    <option
-                                      key={
-                                        role.id
-                                      }
-                                      value={
-                                        role.id
-                                      }
-                                    >
-                                      {role.name}
-                                    </option>
-
-                                  )
-                                )}
-
-                              </select>
-
-                              {updatingRole ===
-                                member.id && (
-
-                                <span className="text-xs text-gray-500">
-                                  Saving...
-                                </span>
-
-                              )}
-
-                            </div>
-
-                          )}
-
-                        </td>
-
-                        {/* STATUS */}
-
-                        <td className="px-6 py-5">
-
-                          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-sm font-medium">
-
-                            <span className="w-2 h-2 rounded-full bg-green-500" />
-
-                            Active
-
+                          <span className="inline-flex px-3 py-2 rounded-lg bg-blue-100 text-blue-700 font-semibold text-sm">
+                            {getRoleName(
+                              invitation.role_id
+                            )}
                           </span>
 
                         </td>
 
-                        {/* ACTION */}
+                        <td className="px-6 py-5">
+
+                          <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-50 text-yellow-700 text-sm font-medium">
+                            <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                            Pending
+                          </span>
+
+                        </td>
 
                         <td className="px-6 py-5">
 
-                          <Link
-                            href={`/app/company/team/${member.id}`}
+                          <button
+                            onClick={() =>
+                              resendInvitation(
+                                invitation.id
+                              )
+                            }
+                            disabled={
+                              resending ===
+                              invitation.id
+                            }
                             className="text-blue-600 hover:text-blue-800 font-semibold text-sm"
                           >
-                            Edit
-                          </Link>
+                            {resending ===
+                            invitation.id
+                              ? "Preparing..."
+                              : copiedId ===
+                                invitation.id
+                              ? "✓ Link Copied"
+                              : "Resend / Copy Link"}
+                          </button>
 
                         </td>
 
                       </tr>
-
                     )
                   )}
 
@@ -842,13 +840,11 @@ export default function CompanyTeamPage() {
               </table>
 
             </div>
-
           )}
 
         </div>
 
       </div>
-
     </main>
   );
 }
