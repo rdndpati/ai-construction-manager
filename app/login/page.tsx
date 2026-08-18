@@ -1,14 +1,36 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import {
+  Suspense,
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
+
 import { supabase } from "@/lib/supabase";
 
-export default function LoginPage() {
+const INVITATION_STORAGE_KEY =
+  "constructiq_invitation_id";
+
+// ============================================================
+// LOGIN CONTENT
+// ============================================================
+
+function LoginContent() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const searchParams =
+    useSearchParams();
+
+  const [email, setEmail] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
 
   const [showPassword, setShowPassword] =
     useState(false);
@@ -19,28 +41,107 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] =
     useState("");
 
+  const [invitationForUI, setInvitationForUI] =
+    useState<string | null>(null);
+
   // ============================================================
-  // GET INVITATION ID FROM URL
+  // GET INVITATION ID
+  //
+  // Priority:
+  // 1. URL
+  // 2. sessionStorage
   // ============================================================
 
   function getInvitationId() {
-    if (typeof window === "undefined") {
+    if (
+      typeof window ===
+      "undefined"
+    ) {
       return null;
     }
 
-    return new URLSearchParams(
-      window.location.search
-    ).get("invitation_id");
+    const urlInvitationId =
+      searchParams.get(
+        "invitation_id"
+      );
+
+    if (urlInvitationId) {
+      console.log(
+        "LOGIN: INVITATION ID FROM URL:",
+        urlInvitationId
+      );
+
+      sessionStorage.setItem(
+        INVITATION_STORAGE_KEY,
+        urlInvitationId
+      );
+
+      return urlInvitationId;
+    }
+
+    const storedInvitationId =
+      sessionStorage.getItem(
+        INVITATION_STORAGE_KEY
+      );
+
+    if (storedInvitationId) {
+      console.log(
+        "LOGIN: INVITATION ID FROM SESSION:",
+        storedInvitationId
+      );
+
+      return storedInvitationId;
+    }
+
+    console.log(
+      "LOGIN: NO INVITATION ID FOUND"
+    );
+
+    return null;
+  }
+
+  // ============================================================
+  // LOAD INVITATION
+  // ============================================================
+
+  useEffect(() => {
+    const invitationId =
+      getInvitationId();
+
+    setInvitationForUI(
+      invitationId
+    );
+  }, [searchParams]);
+
+  // ============================================================
+  // SAVE INVITATION
+  // ============================================================
+
+  function saveInvitationId(
+    invitationId: string
+  ) {
+    if (
+      typeof window !==
+      "undefined"
+    ) {
+      sessionStorage.setItem(
+        INVITATION_STORAGE_KEY,
+        invitationId
+      );
+
+      localStorage.setItem(
+        INVITATION_STORAGE_KEY,
+        invitationId
+      );
+    }
+
+    setInvitationForUI(
+      invitationId
+    );
   }
 
   // ============================================================
   // FIND PENDING INVITATION
-  //
-  // This is only a fallback.
-  //
-  // If the invitation_id is still in the URL, we use that first.
-  // If it is missing, we try to find a pending invitation
-  // belonging to the email the user just logged in with.
   // ============================================================
 
   async function findPendingInvitation(
@@ -55,27 +156,28 @@ export default function LoginPage() {
       const {
         data: invitation,
         error,
-      } = await supabase
-        .from("invitations")
-        .select(
-          "id, email, company_id, role_id, status"
-        )
-        .eq(
-          "email",
-          normalizedEmail
-        )
-        .eq(
-          "status",
-          "Pending"
-        )
-        .order(
-          "created_at",
-          {
-            ascending: false,
-          }
-        )
-        .limit(1)
-        .maybeSingle();
+      } =
+        await supabase
+          .from("invitations")
+          .select(
+            "id, email, company_id, role_id, status"
+          )
+          .eq(
+            "email",
+            normalizedEmail
+          )
+          .eq(
+            "status",
+            "Pending"
+          )
+          .order(
+            "created_at",
+            {
+              ascending: false,
+            }
+          )
+          .limit(1)
+          .maybeSingle();
 
       if (error) {
         console.error(
@@ -99,7 +201,7 @@ export default function LoginPage() {
   }
 
   // ============================================================
-  // GO TO INVITATION ACCEPTANCE
+  // GO TO ACCEPT INVITATION
   // ============================================================
 
   function goToInvitation(
@@ -110,13 +212,15 @@ export default function LoginPage() {
       invitationId
     );
 
+    saveInvitationId(
+      invitationId
+    );
+
     router.replace(
       `/app/accept-invitation?invitation_id=${encodeURIComponent(
         invitationId
       )}`
     );
-
-    router.refresh();
   }
 
   // ============================================================
@@ -132,10 +236,6 @@ export default function LoginPage() {
     setErrorMessage("");
 
     try {
-      // --------------------------------------------------------
-      // Capture invitation ID BEFORE login.
-      // --------------------------------------------------------
-
       const invitationId =
         getInvitationId();
 
@@ -158,8 +258,9 @@ export default function LoginPage() {
       );
 
       console.log(
-        "INVITATION ID FROM URL:",
-        invitationId
+        "INVITATION ID:",
+        invitationId ||
+          "NONE"
       );
 
       console.log(
@@ -178,25 +279,17 @@ export default function LoginPage() {
           {
             email:
               normalizedEmail,
+
             password,
           }
         );
 
-      console.log(
-        "LOGIN DATA:",
-        data
-      );
-
-      console.log(
-        "LOGIN ERROR:",
-        error
-      );
-
-      // ========================================================
-      // LOGIN FAILED
-      // ========================================================
-
       if (error) {
+        console.error(
+          "LOGIN ERROR:",
+          error
+        );
+
         setErrorMessage(
           error.message
         );
@@ -212,16 +305,15 @@ export default function LoginPage() {
         return;
       }
 
+      console.log(
+        "LOGIN SUCCESS:",
+        data.user.email
+      );
+
       // ========================================================
-      // INVITATION ID EXISTS
-      // ========================================================
+      // INVITATION FLOW
       //
-      // This is the strongest signal that this is an invited
-      // user.
-      //
-      // DO NOT query company_id first.
-      //
-      // Send directly to invitation acceptance.
+      // ALWAYS PROCESS INVITATION FIRST.
       // ========================================================
 
       if (invitationId) {
@@ -230,7 +322,7 @@ export default function LoginPage() {
         );
 
         console.log(
-          "SENDING USER TO ACCEPT INVITATION."
+          "GOING TO ACCEPT INVITATION."
         );
 
         goToInvitation(
@@ -241,20 +333,16 @@ export default function LoginPage() {
       }
 
       // ========================================================
-      // NO INVITATION ID
-      //
-      // Check whether this email has a pending invitation.
-      //
-      // This protects the user if the invitation_id was lost
-      // somewhere during login/password reset.
+      // FALLBACK:
+      // FIND PENDING INVITATION BY EMAIL
       // ========================================================
 
       console.log(
-        "NO INVITATION ID IN URL."
+        "NO INVITATION ID."
       );
 
       console.log(
-        "CHECKING FOR PENDING INVITATION."
+        "CHECKING EMAIL FOR PENDING INVITATION."
       );
 
       const pendingInvitation =
@@ -278,20 +366,15 @@ export default function LoginPage() {
       }
 
       // ========================================================
-      // NORMAL USER LOGIN
-      // ========================================================
-      //
-      // No invitation was found.
-      //
-      // Now it is safe to check the profile.
+      // NORMAL USER
       // ========================================================
 
       console.log(
-        "NO PENDING INVITATION FOUND."
+        "NO INVITATION."
       );
 
       console.log(
-        "CHECKING NORMAL USER PROFILE."
+        "CHECKING PROFILE."
       );
 
       const {
@@ -302,7 +385,7 @@ export default function LoginPage() {
         await supabase
           .from("profiles")
           .select(
-            "company_id"
+            "id, company_id, role_id, is_owner"
           )
           .eq(
             "id",
@@ -310,22 +393,11 @@ export default function LoginPage() {
           )
           .maybeSingle();
 
-      // ========================================================
-      // PROFILE LOOKUP
-      // ========================================================
-
       if (profileError) {
         console.error(
           "PROFILE ERROR:",
           profileError
         );
-
-        // Do NOT immediately send the user to
-        // Create Company because the query itself failed.
-        //
-        // This prevents the exact problem where a valid
-        // existing user gets incorrectly treated as a
-        // brand-new company owner.
 
         setErrorMessage(
           "We couldn't load your company information. Please try again."
@@ -335,12 +407,12 @@ export default function LoginPage() {
       }
 
       // ========================================================
-      // PROFILE DOES NOT EXIST
+      // NO PROFILE
       // ========================================================
 
       if (!profile) {
         console.log(
-          "NO PROFILE FOUND."
+          "NO PROFILE."
         );
 
         router.replace(
@@ -351,7 +423,7 @@ export default function LoginPage() {
       }
 
       // ========================================================
-      // PROFILE EXISTS BUT NO COMPANY
+      // PROFILE WITHOUT COMPANY
       // ========================================================
 
       if (!profile.company_id) {
@@ -378,17 +450,16 @@ export default function LoginPage() {
         "/app/dashboard"
       );
 
-      router.refresh();
-
     } catch (err) {
       console.error(
-        "LOGIN ERROR:",
+        "LOGIN UNEXPECTED ERROR:",
         err
       );
 
       setErrorMessage(
         "Something went wrong while signing in. Please try again."
       );
+
     } finally {
       setLoading(false);
     }
@@ -404,10 +475,15 @@ export default function LoginPage() {
 
     console.log(
       "CREATE ACCOUNT - INVITATION ID:",
-      invitationId
+      invitationId ||
+        "NONE"
     );
 
     if (invitationId) {
+      saveInvitationId(
+        invitationId
+      );
+
       router.push(
         `/signup?invitation_id=${encodeURIComponent(
           invitationId
@@ -430,12 +506,11 @@ export default function LoginPage() {
     const invitationId =
       getInvitationId();
 
-    console.log(
-      "FORGOT PASSWORD - INVITATION ID:",
-      invitationId
-    );
-
     if (invitationId) {
+      saveInvitationId(
+        invitationId
+      );
+
       router.push(
         `/forgot-password?invitation_id=${encodeURIComponent(
           invitationId
@@ -459,9 +534,7 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md">
 
-        {/* ====================================================
-            BRAND
-        ==================================================== */}
+        {/* BRAND */}
 
         <div className="text-center mb-8">
 
@@ -479,11 +552,9 @@ export default function LoginPage() {
 
         </div>
 
-        {/* ====================================================
-            INVITATION NOTICE
-        ==================================================== */}
+        {/* INVITATION NOTICE */}
 
-        {getInvitationId() && (
+        {invitationForUI && (
           <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
 
             <p className="font-semibold text-blue-800">
@@ -491,16 +562,13 @@ export default function LoginPage() {
             </p>
 
             <p className="text-sm text-blue-700 mt-1">
-              Sign in with the email address that
-              received the invitation.
+              Sign in or create an account using the email address that received the invitation.
             </p>
 
           </div>
         )}
 
-        {/* ====================================================
-            LOGIN CARD
-        ==================================================== */}
+        {/* LOGIN CARD */}
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
 
@@ -511,23 +579,19 @@ export default function LoginPage() {
             </h2>
 
             <p className="text-gray-500 mt-1">
-              Sign in to manage your construction projects.
+              {invitationForUI
+                ? "Sign in to continue with your invitation."
+                : "Sign in to manage your construction projects."}
             </p>
 
           </div>
-
-          {/* ==================================================
-              FORM
-          ================================================== */}
 
           <form
             onSubmit={handleLogin}
             className="space-y-5"
           >
 
-            {/* ==================================================
-                EMAIL
-            ================================================== */}
+            {/* EMAIL */}
 
             <div>
 
@@ -555,9 +619,7 @@ export default function LoginPage() {
 
             </div>
 
-            {/* ==================================================
-                PASSWORD
-            ================================================== */}
+            {/* PASSWORD */}
 
             <div>
 
@@ -621,9 +683,7 @@ export default function LoginPage() {
 
             </div>
 
-            {/* ==================================================
-                ERROR
-            ================================================== */}
+            {/* ERROR */}
 
             {errorMessage && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -631,9 +691,7 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* ==================================================
-                SIGN IN
-            ================================================== */}
+            {/* LOGIN */}
 
             <button
               type="submit"
@@ -647,9 +705,7 @@ export default function LoginPage() {
 
           </form>
 
-          {/* ====================================================
-              SIGNUP DIVIDER
-          ==================================================== */}
+          {/* DIVIDER */}
 
           <div className="flex items-center gap-3 my-7">
 
@@ -663,9 +719,7 @@ export default function LoginPage() {
 
           </div>
 
-          {/* ====================================================
-              CREATE ACCOUNT
-          ==================================================== */}
+          {/* CREATE ACCOUNT */}
 
           <button
             type="button"
@@ -674,14 +728,12 @@ export default function LoginPage() {
             }
             className="w-full rounded-lg border border-blue-600 bg-white px-4 py-3 font-semibold text-blue-600 transition hover:bg-blue-50"
           >
-            Create Account
+            {invitationForUI
+              ? "Create Account & Join Company"
+              : "Create Account"}
           </button>
 
         </div>
-
-        {/* ====================================================
-            FOOTER
-        ==================================================== */}
 
         <p className="text-center text-sm text-gray-400 mt-6">
           © 2026 ConstructIQ
@@ -690,5 +742,42 @@ export default function LoginPage() {
       </div>
 
     </main>
+  );
+}
+
+// ============================================================
+// LOGIN PAGE
+//
+// Suspense is required because LoginContent uses
+// useSearchParams().
+// ============================================================
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+
+          <div className="bg-white rounded-2xl shadow-lg border p-10 w-full max-w-md text-center">
+
+            <div className="text-4xl mb-4">
+              🏗️
+            </div>
+
+            <h1 className="text-xl font-semibold text-gray-900">
+              Loading...
+            </h1>
+
+            <p className="text-gray-500 mt-2">
+              Please wait.
+            </p>
+
+          </div>
+
+        </main>
+      }
+    >
+      <LoginContent />
+    </Suspense>
   );
 }

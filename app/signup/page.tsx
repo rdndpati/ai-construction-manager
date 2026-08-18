@@ -2,19 +2,23 @@
 
 import {
   Suspense,
+  useEffect,
   useState,
 } from "react";
+
+import Link from "next/link";
 
 import {
   useRouter,
   useSearchParams,
 } from "next/navigation";
 
-import Link from "next/link";
-
 import { supabase } from "@/lib/supabase";
 
-function SignupPageContent() {
+const INVITATION_STORAGE_KEY =
+  "constructiq_invitation_id";
+
+function SignupContent() {
   const router = useRouter();
 
   const searchParams =
@@ -25,6 +29,10 @@ function SignupPageContent() {
       "invitation_id"
     );
 
+  // ============================================================
+  // FORM
+  // ============================================================
+
   const [fullName, setFullName] =
     useState("");
 
@@ -34,14 +42,18 @@ function SignupPageContent() {
   const [password, setPassword] =
     useState("");
 
-  const [confirmPassword, setConfirmPassword] =
-    useState("");
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState("");
 
   const [showPassword, setShowPassword] =
     useState(false);
 
-  const [showConfirmPassword, setShowConfirmPassword] =
-    useState(false);
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false);
 
   const [loading, setLoading] =
     useState(false);
@@ -52,8 +64,274 @@ function SignupPageContent() {
   const [successMessage, setSuccessMessage] =
     useState("");
 
+  const [
+    invitationLoading,
+    setInvitationLoading,
+  ] = useState(
+    !!invitationId
+  );
+
+  const [
+    invitationEmail,
+    setInvitationEmail,
+  ] = useState("");
+
   // ============================================================
-  // HANDLE SIGNUP
+  // SAVE INVITATION
+  // ============================================================
+
+  function saveInvitationId(
+    id: string
+  ) {
+    try {
+      sessionStorage.setItem(
+        INVITATION_STORAGE_KEY,
+        id
+      );
+
+      localStorage.setItem(
+        INVITATION_STORAGE_KEY,
+        id
+      );
+    } catch {}
+  }
+
+  // ============================================================
+  // CLEAR INVITATION
+  // ============================================================
+
+  function clearInvitationId() {
+    try {
+      sessionStorage.removeItem(
+        INVITATION_STORAGE_KEY
+      );
+
+      localStorage.removeItem(
+        INVITATION_STORAGE_KEY
+      );
+    } catch {}
+  }
+
+  // ============================================================
+  // LOAD INVITATION USER
+  // ============================================================
+
+  useEffect(() => {
+    if (!invitationId) {
+      return;
+    }
+
+    saveInvitationId(
+      invitationId
+    );
+
+    loadInvitationUser(
+      invitationId
+    );
+  }, [invitationId]);
+
+  // ============================================================
+  // LOAD INVITATION
+  // ============================================================
+
+  async function loadInvitationUser(
+    id: string
+  ) {
+    try {
+      setInvitationLoading(
+        true
+      );
+
+      setErrorMessage("");
+
+      console.log(
+        "===================================="
+      );
+
+      console.log(
+        "INVITATION SIGNUP"
+      );
+
+      console.log(
+        "INVITATION ID:",
+        id
+      );
+
+      console.log(
+        "===================================="
+      );
+
+      // ========================================================
+      // LOAD INVITATION
+      // ========================================================
+
+      const response =
+        await fetch(
+          `/api/team/invite?invitation_id=${encodeURIComponent(
+            id
+          )}`,
+          {
+            method: "GET",
+            cache: "no-store",
+          }
+        );
+
+      const result =
+        await response.json();
+
+      console.log(
+        "INVITATION RESULT:",
+        result
+      );
+
+      if (!response.ok) {
+        setErrorMessage(
+          result?.error ||
+            "Unable to load invitation."
+        );
+
+        return;
+      }
+
+      const invitation =
+        result?.invitation;
+
+      if (
+        !invitation
+      ) {
+        setErrorMessage(
+          "Invitation not found."
+        );
+
+        return;
+      }
+
+      if (
+        invitation.status !==
+        "Pending"
+      ) {
+        setErrorMessage(
+          "This invitation has already been accepted or is no longer available."
+        );
+
+        return;
+      }
+
+      const invitedEmail =
+        invitation.email
+          ?.trim()
+          .toLowerCase();
+
+      setInvitationEmail(
+        invitedEmail
+      );
+
+      // ========================================================
+      // CHECK CURRENT AUTH USER
+      // ========================================================
+
+      const {
+        data: {
+          user,
+        },
+        error: userError,
+      } =
+        await supabase.auth.getUser();
+
+      console.log(
+        "CURRENT USER:",
+        user?.email ||
+          "NOT LOGGED IN"
+      );
+
+      if (
+        userError ||
+        !user
+      ) {
+        setErrorMessage(
+          "Please open the invitation email again to activate your account."
+        );
+
+        return;
+      }
+
+      const currentEmail =
+        user.email
+          ?.trim()
+          .toLowerCase();
+
+      console.log(
+        "CURRENT EMAIL:",
+        currentEmail
+      );
+
+      console.log(
+        "INVITED EMAIL:",
+        invitedEmail
+      );
+
+      // ========================================================
+      // EMAIL MUST MATCH
+      // ========================================================
+
+      if (
+        currentEmail !==
+        invitedEmail
+      ) {
+        setErrorMessage(
+          `This invitation belongs to ${invitedEmail}. Please sign out and open the invitation using that email address.`
+        );
+
+        return;
+      }
+
+      // ========================================================
+      // PRE-FILL USER INFORMATION
+      // ========================================================
+
+      setEmail(
+        invitedEmail
+      );
+
+      if (
+        user.user_metadata
+          ?.full_name
+      ) {
+        setFullName(
+          user.user_metadata
+            .full_name
+        );
+      } else if (
+        invitation.full_name
+      ) {
+        setFullName(
+          invitation.full_name
+        );
+      }
+
+      console.log(
+        "INVITED USER READY TO SET PASSWORD."
+      );
+
+    } catch (error) {
+      console.error(
+        "LOAD INVITATION SIGNUP ERROR:",
+        error
+      );
+
+      setErrorMessage(
+        "Unable to load the invitation."
+      );
+
+    } finally {
+      setInvitationLoading(
+        false
+      );
+    }
+  }
+
+  // ============================================================
+  // SUBMIT
   // ============================================================
 
   async function handleSignup(
@@ -64,9 +342,31 @@ function SignupPageContent() {
     setErrorMessage("");
     setSuccessMessage("");
 
-    // ----------------------------------------------------------
-    // Validate passwords
-    // ----------------------------------------------------------
+    // ==========================================================
+    // INVITED USER
+    // ==========================================================
+
+    if (invitationId) {
+      await handleInvitedSignup();
+
+      return;
+    }
+
+    // ==========================================================
+    // NORMAL USER
+    // ==========================================================
+
+    await handleNormalSignup();
+  }
+
+  // ============================================================
+  // INVITED USER
+  // ============================================================
+
+  async function handleInvitedSignup() {
+    // ==========================================================
+    // VALIDATE PASSWORD
+    // ==========================================================
 
     if (
       password !==
@@ -79,26 +379,15 @@ function SignupPageContent() {
       return;
     }
 
-    if (password.length < 6) {
+    if (
+      password.length < 6
+    ) {
       setErrorMessage(
         "Password must be at least 6 characters."
       );
 
       return;
     }
-
-    // ----------------------------------------------------------
-    // Normalize email
-    // ----------------------------------------------------------
-
-    const normalizedEmail =
-      email
-        .trim()
-        .toLowerCase();
-
-    // ----------------------------------------------------------
-    // Start loading
-    // ----------------------------------------------------------
 
     setLoading(true);
 
@@ -108,7 +397,7 @@ function SignupPageContent() {
       );
 
       console.log(
-        "SIGNUP START"
+        "INVITED USER PASSWORD SETUP"
       );
 
       console.log(
@@ -118,7 +407,7 @@ function SignupPageContent() {
 
       console.log(
         "EMAIL:",
-        normalizedEmail
+        email
       );
 
       console.log(
@@ -126,169 +415,335 @@ function SignupPageContent() {
       );
 
       // ========================================================
-      // CREATE SUPABASE ACCOUNT
+      // GET CURRENT USER
       // ========================================================
+
+      const {
+        data: {
+          user,
+        },
+        error: userError,
+      } =
+        await supabase.auth.getUser();
+
+      if (
+        userError ||
+        !user
+      ) {
+        setErrorMessage(
+          "Your invitation session has expired. Please open the invitation email again."
+        );
+
+        return;
+      }
+
+      const currentEmail =
+        user.email
+          ?.trim()
+          .toLowerCase();
+
+      const expectedEmail =
+        invitationEmail
+          .trim()
+          .toLowerCase();
+
+      // ========================================================
+      // SECURITY CHECK
+      // ========================================================
+
+      if (
+        currentEmail !==
+        expectedEmail
+      ) {
+        setErrorMessage(
+          "The signed-in email does not match the invitation."
+        );
+
+        return;
+      }
+
+      // ========================================================
+      // SET PASSWORD
+      // ========================================================
+
+      console.log(
+        "SETTING PASSWORD..."
+      );
+
+      const {
+        data: updatedUser,
+        error:
+          updateError,
+      } =
+        await supabase.auth.updateUser(
+          {
+            password,
+            data: {
+              full_name:
+                fullName.trim(),
+            },
+          }
+        );
+
+      if (updateError) {
+        console.error(
+          "PASSWORD UPDATE ERROR:",
+          updateError
+        );
+
+        setErrorMessage(
+          updateError.message
+        );
+
+        return;
+      }
+
+      console.log(
+        "PASSWORD SET SUCCESSFULLY"
+      );
+
+      console.log(
+        "USER:",
+        updatedUser.user?.email
+      );
+
+      // ========================================================
+      // ACCEPT INVITATION
+      // ========================================================
+
+      console.log(
+        "ACCEPTING INVITATION..."
+      );
+
+      const response =
+        await fetch(
+          "/api/team/accept-invitation",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              invitation_id:
+                invitationId,
+            }),
+          }
+        );
+
+      let result: any = null;
+
+      try {
+        result =
+          await response.json();
+      } catch {
+        result = null;
+      }
+
+      console.log(
+        "ACCEPT INVITATION RESPONSE:",
+        result
+      );
+
+      if (!response.ok) {
+        setErrorMessage(
+          result?.error ||
+            "Your password was created, but the invitation could not be accepted."
+        );
+
+        return;
+      }
+
+      if (
+        !result?.success
+      ) {
+        setErrorMessage(
+          "The invitation could not be accepted."
+        );
+
+        return;
+      }
+
+      // ========================================================
+      // SUCCESS
+      // ========================================================
+
+      console.log(
+        "===================================="
+      );
+
+      console.log(
+        "INVITED USER SETUP COMPLETE"
+      );
+
+      console.log(
+        "COMPANY:",
+        result.company_id
+      );
+
+      console.log(
+        "ROLE:",
+        result.role_id
+      );
+
+      console.log(
+        "===================================="
+      );
+
+      clearInvitationId();
+
+      setSuccessMessage(
+        "Your account is ready. Opening your company dashboard..."
+      );
+
+      // ========================================================
+      // GO TO DASHBOARD
+      // ========================================================
+
+      setTimeout(() => {
+        router.replace(
+          "/app/dashboard"
+        );
+
+        router.refresh();
+      }, 700);
+
+    } catch (error: any) {
+      console.error(
+        "INVITED SIGNUP ERROR:",
+        error
+      );
+
+      setErrorMessage(
+        error?.message ||
+          "Something went wrong while creating your account."
+      );
+
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ============================================================
+  // NORMAL USER
+  // ============================================================
+
+  async function handleNormalSignup() {
+    // ==========================================================
+    // VALIDATION
+    // ==========================================================
+
+    if (!fullName.trim()) {
+      setErrorMessage(
+        "Please enter your full name."
+      );
+
+      return;
+    }
+
+    if (!email.trim()) {
+      setErrorMessage(
+        "Please enter your email address."
+      );
+
+      return;
+    }
+
+    if (
+      password !==
+      confirmPassword
+    ) {
+      setErrorMessage(
+        "Passwords do not match."
+      );
+
+      return;
+    }
+
+    if (
+      password.length < 6
+    ) {
+      setErrorMessage(
+        "Password must be at least 6 characters."
+      );
+
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      console.log(
+        "===================================="
+      );
+
+      console.log(
+        "NORMAL USER SIGNUP"
+      );
+
+      console.log(
+        "EMAIL:",
+        email
+      );
+
+      console.log(
+        "===================================="
+      );
 
       const {
         data,
         error,
       } =
-        await supabase.auth.signUp({
-          email:
-            normalizedEmail,
+        await supabase.auth.signUp(
+          {
+            email:
+              email
+                .trim()
+                .toLowerCase(),
 
-          password,
+            password,
 
-          options: {
-            data: {
-              full_name:
-                fullName.trim(),
+            options: {
+              data: {
+                full_name:
+                  fullName.trim(),
+
+                invitation_id:
+                  null,
+              },
+
+              emailRedirectTo:
+                `${window.location.origin}/auth/callback`,
             },
-          },
-        });
-
-      console.log(
-        "SIGNUP DATA:",
-        data
-      );
-
-      console.log(
-        "SIGNUP ERROR:",
-        error
-      );
-
-      // ========================================================
-      // SIGNUP ERROR
-      // ========================================================
+          }
+        );
 
       if (error) {
         console.error(
-          "SIGNUP ERROR:",
+          "NORMAL SIGNUP ERROR:",
           error
         );
 
-        const errorText =
-          error.message
-            .toLowerCase();
-
-        // ------------------------------------------------------
-        // EXISTING USER
-        // ------------------------------------------------------
-
-        if (
-          errorText.includes(
-            "already registered"
-          ) ||
-          errorText.includes(
-            "already exists"
-          ) ||
-          errorText.includes(
-            "user already registered"
-          )
-        ) {
-          if (invitationId) {
-            setErrorMessage(
-              "An account already exists for this email. Please sign in using this email to continue with the invitation."
-            );
-          } else {
-            setErrorMessage(
-              "An account already exists for this email. Please sign in instead."
-            );
-          }
-
-          return;
-        }
-
         setErrorMessage(
           error.message
-        );
-
-        return;
-      }
-
-      // ========================================================
-      // USER WAS NOT CREATED
-      // ========================================================
-
-      if (!data.user) {
-        setErrorMessage(
-          "Unable to create your account. Please try again."
         );
 
         return;
       }
 
       console.log(
-        "ACCOUNT CREATED:",
-        data.user.id
+        "NORMAL SIGNUP SUCCESS:",
+        data.user
       );
 
       // ========================================================
-      // INVITED USER
-      // ========================================================
-      //
-      // If invitation_id exists:
-      //
-      // NEVER send the user to /create-company.
-      //
-      // They must continue through the invitation flow.
-      // ========================================================
-
-      if (invitationId) {
-        // ------------------------------------------------------
-        // CASE 1:
-        // Supabase created a session immediately.
-        // ------------------------------------------------------
-
-        if (data.session) {
-          console.log(
-            "INVITED USER HAS SESSION"
-          );
-
-          console.log(
-            "GOING TO ACCEPT INVITATION"
-          );
-
-          router.replace(
-            `/app/accept-invitation?invitation_id=${encodeURIComponent(
-              invitationId
-            )}`
-          );
-
-          router.refresh();
-
-          return;
-        }
-
-        // ------------------------------------------------------
-        // CASE 2:
-        // Email confirmation required.
-        // ------------------------------------------------------
-
-        console.log(
-          "INVITED USER NEEDS EMAIL CONFIRMATION"
-        );
-
-        setSuccessMessage(
-          "Your account has been created. Please verify your email, then return to the invitation link to join the company."
-        );
-
-        return;
-      }
-
-      // ========================================================
-      // NORMAL USER
-      // ========================================================
-      //
-      // No invitation_id means this is a normal signup.
-      //
-      // Normal users can create their own company.
+      // SESSION CREATED
       // ========================================================
 
       if (data.session) {
-        console.log(
-          "NORMAL USER SIGNUP"
-        );
+        clearInvitationId();
 
         router.replace(
           "/create-company"
@@ -300,21 +755,22 @@ function SignupPageContent() {
       }
 
       // ========================================================
-      // NORMAL USER WITH EMAIL CONFIRMATION
+      // EMAIL CONFIRMATION
       // ========================================================
 
       setSuccessMessage(
-        "Account created successfully! Please check your email to verify your account."
+        "Account created successfully. Please check your email to verify your account."
       );
 
-    } catch (err) {
+    } catch (error: any) {
       console.error(
-        "SIGNUP ERROR:",
-        err
+        "NORMAL SIGNUP ERROR:",
+        error
       );
 
       setErrorMessage(
-        "Something went wrong while creating your account. Please try again."
+        error?.message ||
+          "Something went wrong. Please try again."
       );
 
     } finally {
@@ -323,37 +779,292 @@ function SignupPageContent() {
   }
 
   // ============================================================
-  // GO TO LOGIN
+  // INVITED USER UI
   // ============================================================
 
-  function goToLogin() {
-    if (invitationId) {
-      router.push(
-        `/login?invitation_id=${encodeURIComponent(
-          invitationId
-        )}`
-      );
+  if (invitationId) {
+    if (
+      invitationLoading
+    ) {
+      return (
+        <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
 
-      return;
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
+
+            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-3xl">
+              🏗️
+            </div>
+
+            <h1 className="text-2xl font-bold text-gray-900">
+              Preparing Your Account
+            </h1>
+
+            <p className="mt-3 text-gray-500">
+              Verifying your invitation...
+            </p>
+
+            <div className="mt-6 flex justify-center">
+
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+
+            </div>
+
+          </div>
+
+        </main>
+      );
     }
 
-    router.push(
-      "/login"
+    return (
+      <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
+
+        <div className="w-full max-w-md">
+
+          {/* BRAND */}
+
+          <div className="text-center mb-8">
+
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-3xl shadow-lg">
+              🏗️
+            </div>
+
+            <h1 className="text-3xl font-bold text-gray-900">
+              ConstructIQ
+            </h1>
+
+            <p className="text-gray-500 mt-2">
+              Complete Your Account
+            </p>
+
+          </div>
+
+          {/* CARD */}
+
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+
+            <div className="mb-7">
+
+              <h2 className="text-2xl font-bold text-gray-900">
+                Create Your Password
+              </h2>
+
+              <p className="text-gray-500 mt-2">
+                You&apos;ve been invited to join a ConstructIQ company. Set your password to finish creating your account.
+              </p>
+
+            </div>
+
+            {/* EMAIL */}
+
+            <div className="mb-5">
+
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Email Address
+              </label>
+
+              <input
+                type="email"
+                value={
+                  email
+                }
+                readOnly
+                className="w-full rounded-lg border border-gray-300 bg-gray-50 px-4 py-3 text-gray-600"
+              />
+
+            </div>
+
+            {/* FULL NAME */}
+
+            <div className="mb-5">
+
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Full Name
+              </label>
+
+              <input
+                type="text"
+                value={
+                  fullName
+                }
+                onChange={(e) =>
+                  setFullName(
+                    e.target.value
+                  )
+                }
+                placeholder="Your full name"
+                className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+              />
+
+            </div>
+
+            <form
+              onSubmit={
+                handleSignup
+              }
+              className="space-y-5"
+            >
+
+              {/* PASSWORD */}
+
+              <div>
+
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Create Password
+                </label>
+
+                <div className="relative">
+
+                  <input
+                    type={
+                      showPassword
+                        ? "text"
+                        : "password"
+                    }
+                    required
+                    minLength={
+                      6
+                    }
+                    value={
+                      password
+                    }
+                    onChange={(e) =>
+                      setPassword(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Create a password"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-20 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowPassword(
+                        !showPassword
+                      )
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 hover:text-gray-800"
+                  >
+                    {showPassword
+                      ? "Hide"
+                      : "Show"}
+                  </button>
+
+                </div>
+
+                <p className="text-xs text-gray-500 mt-1">
+                  Minimum 6 characters.
+                </p>
+
+              </div>
+
+              {/* CONFIRM PASSWORD */}
+
+              <div>
+
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Confirm Password
+                </label>
+
+                <div className="relative">
+
+                  <input
+                    type={
+                      showConfirmPassword
+                        ? "text"
+                        : "password"
+                    }
+                    required
+                    value={
+                      confirmPassword
+                    }
+                    onChange={(e) =>
+                      setConfirmPassword(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Confirm your password"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-20 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowConfirmPassword(
+                        !showConfirmPassword
+                      )
+                    }
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-500 hover:text-gray-800"
+                  >
+                    {showConfirmPassword
+                      ? "Hide"
+                      : "Show"}
+                  </button>
+
+                </div>
+
+              </div>
+
+              {/* ERROR */}
+
+              {errorMessage && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {errorMessage}
+                </div>
+              )}
+
+              {/* SUCCESS */}
+
+              {successMessage && (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                  {successMessage}
+                </div>
+              )}
+
+              {/* BUTTON */}
+
+              <button
+                type="submit"
+                disabled={
+                  loading
+                }
+                className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading
+                  ? "Setting Up Account..."
+                  : "Create Account & Join Company"}
+              </button>
+
+            </form>
+
+            <div className="mt-6 rounded-xl bg-blue-50 border border-blue-100 p-4">
+
+              <p className="text-sm text-blue-800">
+                Your email address is already verified through your invitation. After you set your password, you can use this email and password to log in normally.
+              </p>
+
+            </div>
+
+          </div>
+
+          <p className="text-center text-sm text-gray-400 mt-6">
+            © 2026 ConstructIQ
+          </p>
+
+        </div>
+
+      </main>
     );
   }
 
   // ============================================================
-  // UI
+  // NORMAL SIGNUP UI
   // ============================================================
 
   return (
     <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
 
       <div className="w-full max-w-md">
-
-        {/* ====================================================
-            BRAND
-        ==================================================== */}
 
         <div className="text-center mb-8">
 
@@ -371,31 +1082,6 @@ function SignupPageContent() {
 
         </div>
 
-        {/* ====================================================
-            INVITATION NOTICE
-        ==================================================== */}
-
-        {invitationId && (
-          <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 p-4">
-
-            <p className="font-semibold text-blue-800">
-              You&apos;ve been invited to join a company
-            </p>
-
-            <p className="text-sm text-blue-700 mt-1">
-              Create your account below. After
-              signup, you&apos;ll automatically be
-              connected to the company that invited
-              you.
-            </p>
-
-          </div>
-        )}
-
-        {/* ====================================================
-            SIGNUP CARD
-        ==================================================== */}
-
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
 
           <div className="mb-7">
@@ -405,16 +1091,10 @@ function SignupPageContent() {
             </h2>
 
             <p className="text-gray-500 mt-1">
-              {invitationId
-                ? "Create your account to accept the invitation."
-                : "Start managing your construction projects."}
+              Start managing your construction projects.
             </p>
 
           </div>
-
-          {/* ==================================================
-              FORM
-          ================================================== */}
 
           <form
             onSubmit={
@@ -423,105 +1103,85 @@ function SignupPageContent() {
             className="space-y-5"
           >
 
-            {/* ==================================================
-                FULL NAME
-            ================================================== */}
+            {/* FULL NAME */}
 
             <div>
 
-              <label
-                htmlFor="fullName"
-                className="block text-sm font-semibold text-gray-700 mb-2"
-              >
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Full Name
               </label>
 
               <input
-                id="fullName"
                 type="text"
                 required
-                autoComplete="name"
-                placeholder="John Smith"
-                value={fullName}
+                value={
+                  fullName
+                }
                 onChange={(e) =>
                   setFullName(
                     e.target.value
                   )
                 }
+                placeholder="John Smith"
                 className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
               />
 
             </div>
 
-            {/* ==================================================
-                EMAIL
-            ================================================== */}
+            {/* EMAIL */}
 
             <div>
 
-              <label
-                htmlFor="email"
-                className="block text-sm font-semibold text-gray-700 mb-2"
-              >
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Email Address
               </label>
 
               <input
-                id="email"
                 type="email"
                 required
-                autoComplete="email"
-                placeholder="you@company.com"
-                value={email}
+                value={
+                  email
+                }
                 onChange={(e) =>
                   setEmail(
                     e.target.value
                   )
                 }
+                placeholder="you@company.com"
                 className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
               />
 
-              {invitationId && (
-                <p className="text-xs text-blue-600 mt-2">
-                  Use the email address that received
-                  the invitation.
-                </p>
-              )}
-
             </div>
 
-            {/* ==================================================
-                PASSWORD
-            ================================================== */}
+            {/* PASSWORD */}
 
             <div>
 
-              <label
-                htmlFor="password"
-                className="block text-sm font-semibold text-gray-700 mb-2"
-              >
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Password
               </label>
 
               <div className="relative">
 
                 <input
-                  id="password"
                   type={
                     showPassword
                       ? "text"
                       : "password"
                   }
                   required
-                  minLength={6}
-                  autoComplete="new-password"
-                  placeholder="Create a password"
-                  value={password}
+                  minLength={
+                    6
+                  }
+                  value={
+                    password
+                  }
                   onChange={(e) =>
                     setPassword(
                       e.target.value
                     )
                   }
+                  placeholder="Create a password"
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-20 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
 
@@ -547,31 +1207,23 @@ function SignupPageContent() {
 
             </div>
 
-            {/* ==================================================
-                CONFIRM PASSWORD
-            ================================================== */}
+            {/* CONFIRM */}
 
             <div>
 
-              <label
-                htmlFor="confirmPassword"
-                className="block text-sm font-semibold text-gray-700 mb-2"
-              >
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Confirm Password
               </label>
 
               <div className="relative">
 
                 <input
-                  id="confirmPassword"
                   type={
                     showConfirmPassword
                       ? "text"
                       : "password"
                   }
                   required
-                  autoComplete="new-password"
-                  placeholder="Confirm your password"
                   value={
                     confirmPassword
                   }
@@ -580,6 +1232,7 @@ function SignupPageContent() {
                       e.target.value
                     )
                   }
+                  placeholder="Confirm your password"
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 pr-20 outline-none transition focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
                 />
 
@@ -601,86 +1254,35 @@ function SignupPageContent() {
 
             </div>
 
-            {/* ==================================================
-                ERROR
-            ================================================== */}
+            {/* ERROR */}
 
             {errorMessage && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-sm text-red-700">
-
-                <p>
-                  {errorMessage}
-                </p>
-
-                {invitationId &&
-                  errorMessage
-                    .toLowerCase()
-                    .includes(
-                      "account already exists"
-                    ) && (
-                    <button
-                      type="button"
-                      onClick={
-                        goToLogin
-                      }
-                      className="mt-3 font-semibold text-red-700 underline hover:text-red-900"
-                    >
-                      Sign in to continue with your invitation →
-                    </button>
-                  )}
-
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {errorMessage}
               </div>
             )}
 
-            {/* ==================================================
-                SUCCESS
-            ================================================== */}
+            {/* SUCCESS */}
 
             {successMessage && (
-              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-4 text-sm text-green-700">
-
+              <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
                 {successMessage}
-
-                {invitationId && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      router.push(
-                        `/login?invitation_id=${encodeURIComponent(
-                          invitationId
-                        )}`
-                      );
-                    }}
-                    className="block mt-3 font-semibold underline"
-                  >
-                    Continue to Sign In →
-                  </button>
-                )}
-
               </div>
             )}
-
-            {/* ==================================================
-                CREATE ACCOUNT
-            ================================================== */}
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={
+                loading
+              }
               className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading
                 ? "Creating Account..."
-                : invitationId
-                ? "Create Account & Join Company"
                 : "Create Account"}
             </button>
 
           </form>
-
-          {/* ====================================================
-              DIVIDER
-          ==================================================== */}
 
           <div className="flex items-center gap-3 my-7">
 
@@ -694,25 +1296,14 @@ function SignupPageContent() {
 
           </div>
 
-          {/* ====================================================
-              SIGN IN
-          ==================================================== */}
-
-          <button
-            type="button"
-            onClick={
-              goToLogin
-            }
-            className="w-full rounded-lg border border-blue-600 bg-white px-4 py-3 text-center font-semibold text-blue-600 transition hover:bg-blue-50"
+          <Link
+            href="/login"
+            className="block w-full rounded-lg border border-blue-600 bg-white px-4 py-3 text-center font-semibold text-blue-600 transition hover:bg-blue-50"
           >
             Sign In
-          </button>
+          </Link>
 
         </div>
-
-        {/* ====================================================
-            FOOTER
-        ==================================================== */}
 
         <p className="text-center text-sm text-gray-400 mt-6">
           © 2026 ConstructIQ
@@ -725,34 +1316,23 @@ function SignupPageContent() {
 }
 
 // ============================================================
-// PAGE WRAPPER
-//
-// Next.js requires useSearchParams() to be rendered inside
-// a Suspense boundary during production builds.
+// PAGE
 // ============================================================
 
 export default function SignupPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <main className="min-h-screen bg-gray-50 flex items-center justify-center">
 
-          <div className="text-center">
-
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-              <div className="h-6 w-6 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-            </div>
-
-            <p className="text-gray-500">
-              Loading...
-            </p>
-
+          <div className="text-gray-500">
+            Loading...
           </div>
 
         </main>
       }
     >
-      <SignupPageContent />
+      <SignupContent />
     </Suspense>
   );
 }

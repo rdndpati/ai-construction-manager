@@ -55,11 +55,21 @@ export default function CompanyTeamPage() {
   const [updatingRole, setUpdatingRole] =
     useState<string | null>(null);
 
-  const [resending, setResending] =
+  const [copyingInvitation, setCopyingInvitation] =
     useState<string | null>(null);
 
   const [copiedId, setCopiedId] =
     useState<string | null>(null);
+
+  const [deletingInvitation, setDeletingInvitation] =
+    useState<string | null>(null);
+
+  const [deletingAll, setDeletingAll] =
+    useState(false);
+
+  // ============================================================
+  // LOAD TEAM PAGE
+  // ============================================================
 
   const loadPage = useCallback(
     async () => {
@@ -67,9 +77,9 @@ export default function CompanyTeamPage() {
       setError("");
 
       try {
-        /*
-         * Current user
-         */
+        // ========================================================
+        // CURRENT USER
+        // ========================================================
 
         const {
           data: { user },
@@ -84,12 +94,13 @@ export default function CompanyTeamPage() {
           setError(
             "You are not logged in."
           );
+
           return;
         }
 
-        /*
-         * Profile
-         */
+        // ========================================================
+        // PROFILE
+        // ========================================================
 
         const {
           data: profile,
@@ -100,20 +111,32 @@ export default function CompanyTeamPage() {
             .select(
               "id, full_name, role_id, company_id, created_at, is_owner"
             )
-            .eq("id", user.id)
+            .eq(
+              "id",
+              user.id
+            )
             .single();
 
         if (profileError) {
+          console.error(
+            "PROFILE ERROR:",
+            profileError
+          );
+
           setError(
             profileError.message
           );
+
           return;
         }
 
-        if (!profile?.company_id) {
+        if (
+          !profile?.company_id
+        ) {
           setError(
             "Your account is not connected to a company."
           );
+
           return;
         }
 
@@ -121,15 +144,16 @@ export default function CompanyTeamPage() {
           profile.company_id
         );
 
-        /*
-         * Check owner/admin
-         */
+        // ========================================================
+        // CHECK OWNER / ADMIN
+        // ========================================================
 
         let isAdmin = false;
 
         if (profile.role_id) {
           const {
             data: currentRole,
+            error: roleError,
           } =
             await supabase
               .from("roles")
@@ -141,6 +165,13 @@ export default function CompanyTeamPage() {
                 profile.role_id
               )
               .maybeSingle();
+
+          if (roleError) {
+            console.error(
+              "CURRENT ROLE ERROR:",
+              roleError
+            );
+          }
 
           isAdmin =
             currentRole?.name
@@ -155,12 +186,13 @@ export default function CompanyTeamPage() {
         ) {
           window.location.href =
             "/app/projects";
+
           return;
         }
 
-        /*
-         * Roles
-         */
+        // ========================================================
+        // ROLES
+        // ========================================================
 
         const {
           data: rolesData,
@@ -177,6 +209,7 @@ export default function CompanyTeamPage() {
           setError(
             rolesError.message
           );
+
           return;
         }
 
@@ -184,9 +217,9 @@ export default function CompanyTeamPage() {
           rolesData || []
         );
 
-        /*
-         * Active members ONLY
-         */
+        // ========================================================
+        // ACTIVE MEMBERS
+        // ========================================================
 
         const {
           data: membersData,
@@ -209,9 +242,15 @@ export default function CompanyTeamPage() {
             );
 
         if (membersError) {
+          console.error(
+            "MEMBERS ERROR:",
+            membersError
+          );
+
           setError(
             membersError.message
           );
+
           return;
         }
 
@@ -219,13 +258,9 @@ export default function CompanyTeamPage() {
           membersData || []
         );
 
-        /*
-         * Pending invitations
-         *
-         * Loaded from server API because
-         * invitations are managed securely
-         * with the service role.
-         */
+        // ========================================================
+        // INVITATIONS
+        // ========================================================
 
         const invitationResponse =
           await fetch(
@@ -246,18 +281,22 @@ export default function CompanyTeamPage() {
             invitationResult?.error ||
               "Unable to load invitations."
           );
+
           return;
         }
 
+        const invitationList =
+          invitationResult?.invitations ||
+          [];
+
         setInvitations(
-          (invitationResult?.invitations ||
-            []
-          ).filter(
+          invitationList.filter(
             (item: Invitation) =>
               item.status ===
               "Pending"
           )
         );
+
       } catch (err: any) {
         console.error(
           "TEAM PAGE ERROR:",
@@ -275,13 +314,17 @@ export default function CompanyTeamPage() {
     []
   );
 
+  // ============================================================
+  // INITIAL LOAD
+  // ============================================================
+
   useEffect(() => {
     loadPage();
   }, [loadPage]);
 
-  /*
-   * Refresh when returning to page
-   */
+  // ============================================================
+  // REFRESH WHEN WINDOW GETS FOCUS
+  // ============================================================
 
   useEffect(() => {
     function handleFocus() {
@@ -301,9 +344,9 @@ export default function CompanyTeamPage() {
     };
   }, [loadPage]);
 
-  /*
-   * Role name
-   */
+  // ============================================================
+  // GET ROLE NAME
+  // ============================================================
 
   function getRoleName(
     roleId: string | null
@@ -321,9 +364,9 @@ export default function CompanyTeamPage() {
     );
   }
 
-  /*
-   * Update role
-   */
+  // ============================================================
+  // UPDATE MEMBER ROLE
+  // ============================================================
 
   async function updateRole(
     memberId: string,
@@ -333,7 +376,9 @@ export default function CompanyTeamPage() {
       return;
     }
 
-    setUpdatingRole(memberId);
+    setUpdatingRole(
+      memberId
+    );
 
     try {
       const {
@@ -342,7 +387,8 @@ export default function CompanyTeamPage() {
         await supabase
           .from("profiles")
           .update({
-            role_id: roleId,
+            role_id:
+              roleId,
           })
           .eq(
             "id",
@@ -357,23 +403,25 @@ export default function CompanyTeamPage() {
         alert(
           updateError.message
         );
+
         return;
       }
 
       await loadPage();
+
     } finally {
       setUpdatingRole(null);
     }
   }
 
-  /*
-   * Copy / resend invitation
-   */
+  // ============================================================
+  // COPY INVITATION LINK
+  // ============================================================
 
-  async function resendInvitation(
+  async function copyInvitationLink(
     invitationId: string
   ) {
-    setResending(
+    setCopyingInvitation(
       invitationId
     );
 
@@ -383,12 +431,16 @@ export default function CompanyTeamPage() {
           "/api/team/invite",
           {
             method: "POST",
+
             headers: {
               "Content-Type":
                 "application/json",
             },
+
             body: JSON.stringify({
-              action: "resend",
+              action:
+                "resend",
+
               invitation_id:
                 invitationId,
             }),
@@ -401,8 +453,19 @@ export default function CompanyTeamPage() {
       if (!response.ok) {
         alert(
           result?.error ||
-            "Unable to resend invitation."
+            "Unable to prepare the invitation link."
         );
+
+        return;
+      }
+
+      if (
+        !result?.invitation_url
+      ) {
+        alert(
+          "Invitation link was not generated."
+        );
+
         return;
       }
 
@@ -417,37 +480,219 @@ export default function CompanyTeamPage() {
       setTimeout(() => {
         setCopiedId(null);
       }, 2500);
+
     } catch (err) {
       console.error(
-        "RESEND ERROR:",
+        "COPY INVITATION ERROR:",
         err
       );
 
       alert(
         "Unable to copy the invitation link."
       );
+
     } finally {
-      setResending(null);
+      setCopyingInvitation(
+        null
+      );
     }
   }
+
+  // ============================================================
+  // DELETE ONE PENDING INVITATION
+  // ============================================================
+
+  async function deleteInvitation(
+    invitation: Invitation
+  ) {
+    const confirmed =
+      window.confirm(
+        `Are you sure you want to delete the pending invitation for ${invitation.email}?`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingInvitation(
+      invitation.id
+    );
+
+    try {
+      const response =
+        await fetch(
+          "/api/team/invite",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              action:
+                "delete",
+
+              invitation_id:
+                invitation.id,
+            }),
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        alert(
+          result?.error ||
+            "Unable to delete invitation."
+        );
+
+        return;
+      }
+
+      // Remove immediately from screen
+      setInvitations(
+        (current) =>
+          current.filter(
+            (item) =>
+              item.id !==
+              invitation.id
+          )
+      );
+
+      alert(
+        "Invitation deleted successfully."
+      );
+
+    } catch (err) {
+      console.error(
+        "DELETE INVITATION ERROR:",
+        err
+      );
+
+      alert(
+        "Unable to delete invitation."
+      );
+
+    } finally {
+      setDeletingInvitation(
+        null
+      );
+    }
+  }
+
+  // ============================================================
+  // DELETE ALL PENDING INVITATIONS
+  // ============================================================
+
+  async function deleteAllPendingInvitations() {
+    if (
+      invitations.length ===
+      0
+    ) {
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `Are you sure you want to delete ALL ${invitations.length} pending invitations?\n\nThis will only remove pending invitations. Active team members will NOT be affected.`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingAll(true);
+
+    try {
+      const response =
+        await fetch(
+          "/api/team/invite",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              action:
+                "delete_all_pending",
+            }),
+          }
+        );
+
+      const result =
+        await response.json();
+
+      if (!response.ok) {
+        alert(
+          result?.error ||
+            "Unable to delete pending invitations."
+        );
+
+        return;
+      }
+
+      // Clear pending invitations immediately
+      setInvitations([]);
+
+      alert(
+        `${result?.deleted_count || 0} pending invitation(s) deleted successfully.`
+      );
+
+    } catch (err) {
+      console.error(
+        "DELETE ALL INVITATIONS ERROR:",
+        err
+      );
+
+      alert(
+        "Unable to delete pending invitations."
+      );
+
+    } finally {
+      setDeletingAll(false);
+    }
+  }
+
+  // ============================================================
+  // LOADING
+  // ============================================================
 
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
+
         <div className="max-w-7xl mx-auto">
+
           <div className="bg-white rounded-2xl border p-10 text-center">
+
             Loading team members...
+
           </div>
+
         </div>
+
       </main>
     );
   }
 
+  // ============================================================
+  // ERROR
+  // ============================================================
+
   if (error) {
     return (
       <main className="min-h-screen bg-gray-50 p-8">
+
         <div className="max-w-7xl mx-auto">
+
           <div className="bg-red-50 border border-red-200 rounded-2xl p-8">
+
             <h1 className="text-2xl font-bold text-red-700">
               Team Members
             </h1>
@@ -457,30 +702,47 @@ export default function CompanyTeamPage() {
             </p>
 
             <button
-              onClick={loadPage}
+              onClick={
+                loadPage
+              }
               className="mt-5 bg-blue-600 text-white px-5 py-2.5 rounded-lg font-semibold"
             >
               Try Again
             </button>
+
           </div>
+
         </div>
+
       </main>
     );
   }
+
+  // ============================================================
+  // TOTAL MEMBERS
+  // ============================================================
 
   const totalMembers =
     members.length +
     invitations.length;
 
+  // ============================================================
+  // PAGE
+  // ============================================================
+
   return (
     <main className="min-h-screen bg-gray-50 p-8">
+
       <div className="max-w-7xl mx-auto">
 
-        {/* HEADER */}
+        {/* ======================================================
+            HEADER
+        ====================================================== */}
 
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
 
           <div>
+
             <h1 className="text-4xl font-bold text-gray-900">
               Team Members
             </h1>
@@ -488,6 +750,7 @@ export default function CompanyTeamPage() {
             <p className="text-gray-500 mt-2">
               Manage users, roles, and access for your company.
             </p>
+
           </div>
 
           <Link
@@ -499,11 +762,16 @@ export default function CompanyTeamPage() {
 
         </div>
 
-        {/* SUMMARY */}
+        {/* ======================================================
+            SUMMARY
+        ====================================================== */}
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
 
+          {/* TOTAL */}
+
           <div className="bg-white border rounded-2xl p-6">
+
             <p className="text-sm text-gray-500">
               Total Members
             </p>
@@ -511,9 +779,13 @@ export default function CompanyTeamPage() {
             <p className="text-3xl font-bold text-gray-900 mt-2">
               {totalMembers}
             </p>
+
           </div>
 
+          {/* ACTIVE */}
+
           <div className="bg-white border rounded-2xl p-6">
+
             <p className="text-sm text-gray-500">
               Active Members
             </p>
@@ -521,9 +793,13 @@ export default function CompanyTeamPage() {
             <p className="text-3xl font-bold text-green-600 mt-2">
               {members.length}
             </p>
+
           </div>
 
+          {/* PENDING */}
+
           <div className="bg-white border rounded-2xl p-6">
+
             <p className="text-sm text-gray-500">
               Pending Invitations
             </p>
@@ -531,9 +807,13 @@ export default function CompanyTeamPage() {
             <p className="text-3xl font-bold text-yellow-600 mt-2">
               {invitations.length}
             </p>
+
           </div>
 
+          {/* COMPANY */}
+
           <div className="bg-white border rounded-2xl p-6">
+
             <p className="text-sm text-gray-500">
               Company
             </p>
@@ -541,17 +821,21 @@ export default function CompanyTeamPage() {
             <p className="text-xs font-mono text-gray-700 mt-3 truncate">
               {companyId}
             </p>
+
           </div>
 
         </div>
 
-        {/* ACTIVE MEMBERS */}
+        {/* ======================================================
+            ACTIVE MEMBERS
+        ====================================================== */}
 
         <div className="bg-white border rounded-2xl shadow-sm overflow-hidden mb-8">
 
           <div className="px-6 py-5 border-b flex items-center justify-between">
 
             <div>
+
               <h2 className="text-xl font-bold text-gray-900">
                 Active Members
               </h2>
@@ -559,11 +843,14 @@ export default function CompanyTeamPage() {
               <p className="text-sm text-gray-500 mt-1">
                 Users who have accepted their invitation.
               </p>
+
             </div>
 
             <button
-              onClick={loadPage}
-              className="border border-gray-300 px-4 py-2 rounded-lg text-sm"
+              onClick={
+                loadPage
+              }
+              className="border border-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-50"
             >
               Refresh
             </button>
@@ -580,7 +867,9 @@ export default function CompanyTeamPage() {
               <table className="w-full">
 
                 <thead className="bg-gray-50 border-b">
+
                   <tr>
+
                     <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
                       Member
                     </th>
@@ -596,7 +885,9 @@ export default function CompanyTeamPage() {
                     <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
                       Actions
                     </th>
+
                   </tr>
+
                 </thead>
 
                 <tbody>
@@ -604,22 +895,33 @@ export default function CompanyTeamPage() {
                   {members.map(
                     (member) => (
                       <tr
-                        key={member.id}
+                        key={
+                          member.id
+                        }
                         className="border-b last:border-b-0"
                       >
+
+                        {/* MEMBER */}
 
                         <td className="px-6 py-5">
 
                           <div className="flex items-center gap-3">
 
                             <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold">
-                              {(member.full_name ||
-                                "U")
-                                .charAt(0)
+
+                              {(
+                                member.full_name ||
+                                "U"
+                              )
+                                .charAt(
+                                  0
+                                )
                                 .toUpperCase()}
+
                             </div>
 
                             <div>
+
                               <p className="font-semibold text-gray-900">
                                 {member.full_name ||
                                   "No Name"}
@@ -628,11 +930,14 @@ export default function CompanyTeamPage() {
                               <p className="text-xs text-gray-400">
                                 Team Member
                               </p>
+
                             </div>
 
                           </div>
 
                         </td>
+
+                        {/* ROLE */}
 
                         <td className="px-6 py-5">
 
@@ -650,20 +955,26 @@ export default function CompanyTeamPage() {
                                 updatingRole ===
                                 member.id
                               }
-                              onChange={(e) =>
+                              onChange={(
+                                e
+                              ) =>
                                 updateRole(
                                   member.id,
-                                  e.target.value
+                                  e.target
+                                    .value
                                 )
                               }
                               className="border border-gray-300 rounded-lg px-3 py-2 bg-white text-sm min-w-[180px]"
                             >
+
                               <option value="">
                                 No Role Assigned
                               </option>
 
                               {roles.map(
-                                (role) => (
+                                (
+                                  role
+                                ) => (
                                   <option
                                     key={
                                       role.id
@@ -672,23 +983,33 @@ export default function CompanyTeamPage() {
                                       role.id
                                     }
                                   >
-                                    {role.name}
+                                    {
+                                      role.name
+                                    }
                                   </option>
                                 )
                               )}
+
                             </select>
                           )}
 
                         </td>
 
+                        {/* STATUS */}
+
                         <td className="px-6 py-5">
 
                           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-50 text-green-700 text-sm font-medium">
+
                             <span className="w-2 h-2 rounded-full bg-green-500" />
+
                             Active
+
                           </span>
 
                         </td>
+
+                        {/* ACTION */}
 
                         <td className="px-6 py-5">
 
@@ -714,27 +1035,74 @@ export default function CompanyTeamPage() {
 
         </div>
 
-        {/* PENDING INVITATIONS */}
+        {/* ======================================================
+            PENDING INVITATIONS
+        ====================================================== */}
 
         <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
 
-          <div className="px-6 py-5 border-b">
+          {/* ====================================================
+              PENDING HEADER
+          ==================================================== */}
 
-            <h2 className="text-xl font-bold text-gray-900">
-              Pending Invitations
-            </h2>
+          <div className="px-6 py-5 border-b flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
-            <p className="text-sm text-gray-500 mt-1">
-              People who have been invited but have not joined yet.
-            </p>
+            <div>
+
+              <h2 className="text-xl font-bold text-gray-900">
+                Pending Invitations
+              </h2>
+
+              <p className="text-sm text-gray-500 mt-1">
+                People who have been invited but have not joined yet.
+              </p>
+
+            </div>
+
+            {/* DELETE ALL BUTTON */}
+
+            {invitations.length > 0 && (
+              <button
+                onClick={
+                  deleteAllPendingInvitations
+                }
+                disabled={
+                  deletingAll
+                }
+                className="bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white px-4 py-2.5 rounded-lg font-semibold text-sm"
+              >
+                {deletingAll
+                  ? "Deleting..."
+                  : `Delete All Pending (${invitations.length})`}
+              </button>
+            )}
 
           </div>
 
+          {/* ====================================================
+              NO PENDING INVITATIONS
+          ==================================================== */}
+
           {invitations.length === 0 ? (
-            <div className="p-10 text-center text-gray-500">
-              No pending invitations.
+
+            <div className="p-10 text-center">
+
+              <div className="text-5xl mb-4">
+                ✅
+              </div>
+
+              <h3 className="text-lg font-semibold text-gray-900">
+                No Pending Invitations
+              </h3>
+
+              <p className="text-gray-500 mt-2">
+                All invitations have been accepted or removed.
+              </p>
+
             </div>
+
           ) : (
+
             <div className="overflow-x-auto">
 
               <table className="w-full">
@@ -756,7 +1124,7 @@ export default function CompanyTeamPage() {
                     </th>
 
                     <th className="text-left px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
-                      Action
+                      Actions
                     </th>
 
                   </tr>
@@ -766,13 +1134,18 @@ export default function CompanyTeamPage() {
                 <tbody>
 
                   {invitations.map(
-                    (invitation) => (
+                    (
+                      invitation
+                    ) => (
+
                       <tr
                         key={
                           invitation.id
                         }
                         className="border-b last:border-b-0"
                       >
+
+                        {/* INVITED MEMBER */}
 
                         <td className="px-6 py-5">
 
@@ -787,6 +1160,8 @@ export default function CompanyTeamPage() {
 
                         </td>
 
+                        {/* ROLE */}
+
                         <td className="px-6 py-5">
 
                           <span className="inline-flex px-3 py-2 rounded-lg bg-blue-100 text-blue-700 font-semibold text-sm">
@@ -797,41 +1172,79 @@ export default function CompanyTeamPage() {
 
                         </td>
 
+                        {/* STATUS */}
+
                         <td className="px-6 py-5">
 
                           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-yellow-50 text-yellow-700 text-sm font-medium">
+
                             <span className="w-2 h-2 rounded-full bg-yellow-500" />
+
                             Pending
+
                           </span>
 
                         </td>
 
+                        {/* ACTIONS */}
+
                         <td className="px-6 py-5">
 
-                          <button
-                            onClick={() =>
-                              resendInvitation(
-                                invitation.id
-                              )
-                            }
-                            disabled={
-                              resending ===
+                          <div className="flex items-center gap-5">
+
+                            {/* COPY */}
+
+                            <button
+                              onClick={() =>
+                                copyInvitationLink(
+                                  invitation.id
+                                )
+                              }
+                              disabled={
+                                copyingInvitation ===
+                                  invitation.id ||
+                                deletingInvitation ===
+                                  invitation.id ||
+                                deletingAll
+                              }
+                              className="text-blue-600 hover:text-blue-800 font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {copyingInvitation ===
                               invitation.id
-                            }
-                            className="text-blue-600 hover:text-blue-800 font-semibold text-sm"
-                          >
-                            {resending ===
-                            invitation.id
-                              ? "Preparing..."
-                              : copiedId ===
-                                invitation.id
-                              ? "✓ Link Copied"
-                              : "Resend / Copy Link"}
-                          </button>
+                                ? "Preparing..."
+                                : copiedId ===
+                                  invitation.id
+                                ? "✓ Link Copied"
+                                : "Copy Invitation Link"}
+                            </button>
+
+                            {/* DELETE */}
+
+                            <button
+                              onClick={() =>
+                                deleteInvitation(
+                                  invitation
+                                )
+                              }
+                              disabled={
+                                deletingInvitation ===
+                                  invitation.id ||
+                                deletingAll
+                              }
+                              className="text-red-600 hover:text-red-800 font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {deletingInvitation ===
+                              invitation.id
+                                ? "Deleting..."
+                                : "Delete"}
+                            </button>
+
+                          </div>
 
                         </td>
 
                       </tr>
+
                     )
                   )}
 
@@ -840,11 +1253,13 @@ export default function CompanyTeamPage() {
               </table>
 
             </div>
+
           )}
 
         </div>
 
       </div>
+
     </main>
   );
 }

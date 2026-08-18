@@ -133,9 +133,46 @@ export default function Home() {
         profileData as Profile;
 
       console.log(
-        "PROFILE:",
-        profile
-      );
+  "================================="
+);
+
+console.log(
+  "INVITED USER PROFILE CHECK"
+);
+
+console.log(
+  "USER ID:",
+  user.id
+);
+
+console.log(
+  "USER EMAIL:",
+  user.email
+);
+
+console.log(
+  "PROFILE ID:",
+  profile.id
+);
+
+console.log(
+  "PROFILE COMPANY ID:",
+  profile.company_id
+);
+
+console.log(
+  "PROFILE OWNER:",
+  profile.is_owner
+);
+
+console.log(
+  "PROFILE ROLE:",
+  profile.roles
+);
+
+console.log(
+  "================================="
+);
 
       // =====================================================
       // 3. MAKE SURE USER HAS COMPANY
